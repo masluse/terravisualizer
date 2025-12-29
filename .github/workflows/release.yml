@@ -42,7 +42,6 @@ jobs:
         # Create the executable with bundled configs and icons
         pyinstaller --onefile \
           --add-data "terravisualizer.hcl:." \
-          --add-data "terravisualizer.json:." \
           --add-data "icons:icons" \
           --name terravisualizer \
           terravisualizer/cli.py
