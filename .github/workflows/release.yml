@@ -67,6 +67,8 @@ jobs:
         
         The executable includes a default configuration, so you can run it without providing a config file.
         
+        **Note**: While the executable is standalone and doesn't require Python, you still need to have Graphviz installed on your system.
+        
         ## Prerequisites
         
         - Graphviz (system package)
