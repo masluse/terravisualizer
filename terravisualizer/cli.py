@@ -59,21 +59,16 @@ def main():
             meipass_dir = Path(meipass)
             if meipass_dir.exists() and meipass_dir.is_dir():
                 bundled_hcl = meipass_dir / "terravisualizer.hcl"
-                bundled_json = meipass_dir / "terravisualizer.json"
                 if bundled_hcl.exists():
                     config_file = bundled_hcl
-                elif bundled_json.exists():
-                    config_file = bundled_json
         
         # Fallback to local files if not bundled
         if not config_file:
             if Path("terravisualizer.hcl").exists():
                 config_file = Path("terravisualizer.hcl")
-            elif Path("terravisualizer.json").exists():
-                config_file = Path("terravisualizer.json")
         
         if not config_file:
-            print(f"Error: No configuration file found (checked embedded, local terravisualizer.hcl/json). Please provide one with --config.", file=sys.stderr)
+            print(f"Error: No configuration file found (checked embedded and local terravisualizer.hcl). Please provide one with --config.", file=sys.stderr)
             sys.exit(1)
 
     try:

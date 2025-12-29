@@ -214,7 +214,7 @@ To build the Linux executable:
 
 ```bash
 pip install pyinstaller
-pyinstaller --onefile --add-data "terravisualizer.hcl:." --add-data "terravisualizer.json:." --add-data "icons:icons" --name terravisualizer terravisualizer/cli.py
+pyinstaller --onefile --add-data "terravisualizer.hcl:." --add-data "icons:icons" --name terravisualizer terravisualizer/cli.py
 ```
 
 The executable will be created in the `dist/` directory.
