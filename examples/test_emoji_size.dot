@@ -1,0 +1,13 @@
+digraph {
+    node [shape=plaintext]
+    node_0 [label=<
+<TABLE BORDER="1" COLOR="#dadce0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="10" BGCOLOR="white">
+  <TR>
+    <TD WIDTH="44" HEIGHT="44" BGCOLOR="#f1f3f4" BORDER="0"><FONT POINT-SIZE="22">📦</FONT></TD>
+    <TD ALIGN="LEFT" BALIGN="LEFT">
+      <FONT POINT-SIZE="14" COLOR="#202124"><B>google_compute_address</B></FONT><BR/>
+      <FONT POINT-SIZE="11" COLOR="#5f6368">static-ip-us-central</FONT>
+    </TD>
+  </TR>
+</TABLE>>]
+}
