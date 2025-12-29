@@ -73,7 +73,7 @@ def main():
                 config_file = Path("terravisualizer.json")
         
         if not config_file:
-            print(f"Error: No configuration file found (checked embedded, local terravisualizer.hcl/json). Please provide one with --config", file=sys.stderr)
+            print(f"Error: No configuration file found (checked embedded, local terravisualizer.hcl/json). Please provide one with --config.", file=sys.stderr)
             sys.exit(1)
 
     try:
