@@ -21,8 +21,8 @@ def main():
     )
     parser.add_argument(
         "--config",
-        default="terravisualizer.hcl",
-        help="Path to the configuration file (default: terravisualizer.hcl)",
+        default=None,
+        help="Path to the configuration file (default: embedded terravisualizer.hcl)",
     )
     parser.add_argument(
         "--output",
@@ -44,16 +44,42 @@ def main():
         print(f"Error: Terraform plan file not found: {args.file}", file=sys.stderr)
         sys.exit(1)
 
-    # Validate config file
-    config_file = Path(args.config)
-    if not config_file.exists():
-        print(f"Error: Configuration file not found: {args.config}", file=sys.stderr)
-        sys.exit(1)
+    # Handle config file - use embedded default if not provided
+    config_file = None
+    if args.config:
+        config_file = Path(args.config)
+        if not config_file.exists():
+            print(f"Error: Configuration file not found: {args.config}", file=sys.stderr)
+            sys.exit(1)
+    else:
+        # Try to find embedded config (for PyInstaller builds)
+        meipass = getattr(sys, '_MEIPASS', None)
+        if meipass and isinstance(meipass, str):
+            # Running as PyInstaller bundle
+            meipass_dir = Path(meipass)
+            if meipass_dir.exists() and meipass_dir.is_dir():
+                bundled_hcl = meipass_dir / "terravisualizer.hcl"
+                bundled_json = meipass_dir / "terravisualizer.json"
+                if bundled_hcl.exists():
+                    config_file = bundled_hcl
+                elif bundled_json.exists():
+                    config_file = bundled_json
+        
+        # Fallback to local files if not bundled
+        if not config_file:
+            if Path("terravisualizer.hcl").exists():
+                config_file = Path("terravisualizer.hcl")
+            elif Path("terravisualizer.json").exists():
+                config_file = Path("terravisualizer.json")
+        
+        if not config_file:
+            print(f"Error: No configuration file found (checked embedded, local terravisualizer.hcl/json). Please provide one with --config.", file=sys.stderr)
+            sys.exit(1)
 
     try:
         # Load configuration
-        print(f"Loading configuration from {args.config}...")
-        config = load_config(args.config)
+        print(f"Loading configuration from {config_file}...")
+        config = load_config(str(config_file))
 
         # Parse Terraform plan
         print(f"Parsing Terraform plan from {args.file}...")

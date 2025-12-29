@@ -24,157 +24,32 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install build wheel setuptools
+        pip install pyinstaller==6.17.0
         sudo apt-get update
         sudo apt-get install -y graphviz
     
-    - name: Build package
+    - name: Install package dependencies
       run: |
-        python -m build
+        pip install -r requirements.txt
     
     - name: Get version from tag
       id: get_version
       run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
     
-    - name: Create standalone executable script
+    - name: Build Linux executable with PyInstaller
       run: |
-        python3 << 'PYTHON_SCRIPT'
-        #!/usr/bin/env python3
-        """
-        Script to create a standalone terravisualizer executable
-        with all code embedded.
-        """
-        import os
-        import re
-        from pathlib import Path
+        # Create the executable with bundled configs and icons
+        pyinstaller --onefile \
+          --add-data "terravisualizer.hcl:." \
+          --add-data "terravisualizer.json:." \
+          --add-data "icons:icons" \
+          --name terravisualizer \
+          terravisualizer/cli.py
         
-        # Read all module files
-        init_py = Path("terravisualizer/__init__.py").read_text()
-        cli_py = Path("terravisualizer/cli.py").read_text()
-        config_parser_py = Path("terravisualizer/config_parser.py").read_text()
-        plan_parser_py = Path("terravisualizer/plan_parser.py").read_text()
-        visualizer_py = Path("terravisualizer/visualizer.py").read_text()
-        
-        # Remove internal terravisualizer imports from each module
-        def remove_internal_imports(code):
-            """Remove imports from terravisualizer modules."""
-            lines = code.split('\n')
-            filtered_lines = []
-            for line in lines:
-                # Skip lines that import from terravisualizer (both styles)
-                if (line.strip().startswith('from terravisualizer') or 
-                    line.strip().startswith('import terravisualizer')):
-                    continue
-                filtered_lines.append(line)
-            return '\n'.join(filtered_lines)
-        
-        # Apply import removal to all modules for consistency
-        init_py = remove_internal_imports(init_py)
-        cli_py = remove_internal_imports(cli_py)
-        config_parser_py = remove_internal_imports(config_parser_py)
-        plan_parser_py = remove_internal_imports(plan_parser_py)
-        visualizer_py = remove_internal_imports(visualizer_py)
-        
-        # Create the standalone script
-        standalone_script = '''#!/usr/bin/env python3
-        """
-        Terravisualizer Standalone Script
-        
-        This is a self-contained script that includes all terravisualizer code.
-        No installation required - just ensure Python 3.7+ and Graphviz are installed.
-        
-        Usage: 
-          ./terravisualizer --file tfplan.json --config config.hcl
-          
-        Prerequisites:
-          - Python 3.7 or higher
-          - Graphviz (system package)
-            - Ubuntu/Debian: sudo apt-get install graphviz
-            - macOS: brew install graphviz
-            - Windows: Download from https://graphviz.org/download/
-        """
-
-        import subprocess
-        import sys
-        import os
-
-        # Check Python version
-        if sys.version_info < (3, 7):
-            print("ERROR: Python 3.7 or higher is required")
-            sys.exit(1)
-        
-        # Check for graphviz
-        def check_graphviz():
-            """Check if graphviz is installed."""
-            try:
-                subprocess.run(
-                    ["dot", "-V"], 
-                    capture_output=True, 
-                    check=True
-                )
-            except (subprocess.CalledProcessError, FileNotFoundError):
-                print("ERROR: Graphviz is not installed!", file=sys.stderr)
-                print("Please install it:", file=sys.stderr)
-                print("  Ubuntu/Debian: sudo apt-get install graphviz", file=sys.stderr)
-                print("  macOS: brew install graphviz", file=sys.stderr)
-                print("  Windows: Download from https://graphviz.org/download/", file=sys.stderr)
-                sys.exit(1)
-        
-        check_graphviz()
-        
-        # Install graphviz Python package if needed
-        try:
-            import graphviz
-        except ImportError:
-            print("Installing graphviz Python package...")
-            try:
-                subprocess.check_call([
-                    sys.executable, "-m", "pip", "install", 
-                    "graphviz>=0.20.0", "--quiet", "--user"
-                ])
-                # Python will automatically find the newly installed package on next import
-                import graphviz
-            except Exception as e:
-                print(f"ERROR: Failed to install graphviz Python package: {e}", file=sys.stderr)
-                print("Please install it manually: pip install graphviz", file=sys.stderr)
-                sys.exit(1)
-        
-        # ============================================================================
-        # EMBEDDED TERRAVISUALIZER CODE
-        # ============================================================================
-        
-        ''' + f'''
-        # --- terravisualizer/__init__.py ---
-        {init_py}
-        
-        # --- terravisualizer/config_parser.py ---
-        {config_parser_py}
-        
-        # --- terravisualizer/plan_parser.py ---
-        {plan_parser_py}
-        
-        # --- terravisualizer/visualizer.py ---
-        {visualizer_py}
-        
-        # --- terravisualizer/cli.py ---
-        {cli_py}
-        
-        # ============================================================================
-        # MAIN ENTRY POINT
-        # ============================================================================
-        
-        if __name__ == "__main__":
-            main()
-        '''
-        
-        # Write the standalone script to dist directory to avoid conflict with terravisualizer/ directory
-        with open("dist/terravisualizer", "w") as f:
-            f.write(standalone_script)
-        
-        print("Standalone script created successfully")
-        PYTHON_SCRIPT
-        
-        chmod +x dist/terravisualizer
+        # Move to bin directory structure
+        mkdir -p dist/bin
+        mv dist/terravisualizer dist/bin/terravisualizer
+        chmod +x dist/bin/terravisualizer
     
     - name: Create release notes
       run: |
@@ -183,28 +58,19 @@ jobs:
         
         ## Installation
         
-        ### Method 1: Install with pip
-        \`\`\`bash
-        pip install dist/terravisualizer-${{ steps.get_version.outputs.VERSION }}-py3-none-any.whl
-        \`\`\`
-        
-        ### Method 2: One-line installer (downloads and runs)
-        \`\`\`bash
-        curl -sSL https://github.com/masluse/terravisualizer/releases/download/v${{ steps.get_version.outputs.VERSION }}/terravisualizer | python3 - --file tfplan.json --config config.hcl
-        \`\`\`
-        
-        ### Method 3: Download standalone script (fully self-contained, no installation needed)
+        ### Download and run the executable
         \`\`\`bash
         curl -sSL -o terravisualizer https://github.com/masluse/terravisualizer/releases/download/v${{ steps.get_version.outputs.VERSION }}/terravisualizer
         chmod +x terravisualizer
-        ./terravisualizer --file tfplan.json --config config.hcl
+        ./terravisualizer --file tfplan.json
         \`\`\`
         
-        **Note**: Method 3 includes all terravisualizer code embedded in the script. No PyPI installation required!
+        The executable includes a default configuration, so you can run it without providing a config file.
+        
+        **Note**: While the executable is standalone and doesn't require Python, you still need to have Graphviz installed on your system.
         
         ## Prerequisites
         
-        - Python 3.7 or higher
         - Graphviz (system package)
           - Ubuntu/Debian: \`sudo apt-get install graphviz\`
           - macOS: \`brew install graphviz\`
@@ -212,15 +78,22 @@ jobs:
         
         ## Usage
         
+        Basic usage with embedded default config:
         \`\`\`bash
-        terravisualizer --file tfplan.json --config terravisualizer.hcl --output diagram.png
+        ./terravisualizer --file tfplan.json
+        \`\`\`
+        
+        With custom configuration:
+        \`\`\`bash
+        ./terravisualizer --file tfplan.json --config my_config.hcl --output diagram.png
         \`\`\`
         
         ## What's New
         
+        - Linux executable with embedded default configuration
+        - No Python installation required (standalone binary)
+        - Includes icons for common resource types
         - Hierarchical resource grouping
-        - Icon support for resource types
-        - Formatted node display (icon, type, name)
         - Support for HCL and JSON configuration formats
         - Multiple output formats (PNG, SVG, PDF)
         EOF
@@ -229,24 +102,9 @@ jobs:
       uses: softprops/action-gh-release@v1
       with:
         files: |
-          dist/*
+          dist/bin/terravisualizer
         body_path: release_notes.md
         draft: false
         prerelease: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    
-    - name: Upload to PyPI (optional)
-      if: github.repository == 'masluse/terravisualizer'
-      env:
-        TWINE_USERNAME: __token__
-        TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-      run: |
-        pip install twine
-        # Only upload if PYPI_API_TOKEN is set
-        if [ -n "$TWINE_PASSWORD" ]; then
-          twine upload dist/*
-        else
-          echo "Skipping PyPI upload - PYPI_API_TOKEN not set"
-        fi
-      continue-on-error: true
