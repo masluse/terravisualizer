@@ -263,23 +263,30 @@ def generate_diagram(
     grouped = group_resources_hierarchically(resources, config)
     
     # Create directed graph with improved layout settings
-    dot = Digraph(comment='Terraform Resources')
+    dot = Digraph(comment='Terraform Resources', engine='dot')
     
-    # Improved layout settings for better visual appearance
-    dot.attr(rankdir='TB')  # Top to bottom
-    dot.attr(splines='polyline')  # Smoother connections
-    dot.attr(nodesep='0.8')  # Horizontal spacing between nodes
-    dot.attr(ranksep='1.2')  # Vertical spacing between ranks
-    dot.attr(pad='0.5')  # Padding around the graph
-    dot.attr(compound='true')  # Allow edges between clusters
+    # Layout / Packing
+    dot.attr(rankdir='LR')
+    dot.attr(splines='ortho')          # rechte Winkel wie GCP-Diagramme
+    dot.attr(compound='true')
+    dot.attr(concentrate='true')
+    dot.attr(newrank='true')
+    dot.attr(pack='true')
+    dot.attr(packmode='clust')         # packt Cluster statt alles in eine Linie
+    dot.attr(nodesep='0.55')
+    dot.attr(ranksep='0.85')
+    dot.attr(pad='0.35')
+    dot.attr(margin='0.2')
+    dot.attr(dpi='144')
     
-    # Graph-level styling
-    dot.attr(bgcolor='#f5f5f5')  # Light gray background
+    # Graph look
+    dot.attr(bgcolor='#f5f5f5')
     dot.attr(fontname='Helvetica,Arial,sans-serif')
     dot.attr(fontsize='12')
     
-    # Node defaults
+    # Defaults
     dot.attr('node', shape='plaintext', fontname='Helvetica,Arial,sans-serif')
+    dot.attr('edge', color='#5f6368', penwidth='1.2', arrowsize='0.7')
     
     # Track node IDs
     node_counter = 0
@@ -299,26 +306,31 @@ def generate_diagram(
             # Create sub-clusters within the outer cluster
             for sub_key, resources_in_group in sorted(sub_groups.items()):
                 sub_cluster_name = f'cluster_sub_{abs(hash((outer_key, sub_key)))}'
-                
+            
                 with outer_cluster.subgraph(name=sub_cluster_name) as sub_cluster:
                     sub_label = _format_sub_group_label(sub_key)
                     sub_cluster.attr(label=sub_label, fontsize='14', fontname='Helvetica,Arial,sans-serif')
-                    sub_cluster.attr(style='filled,rounded', color='#5f6368', fillcolor='#ffffff', penwidth='1.5')
-                    sub_cluster.attr(margin='15')
-                    
-                    # Add resources to the sub-cluster
+                    sub_cluster.attr(style='filled,rounded', color='#dadce0', fillcolor='#ffffff', penwidth='1.5')
+                    sub_cluster.attr(margin='14')
+            
+                    # >>> NEU: IDs sammeln
+                    sub_node_ids: List[str] = []
+            
                     for resource in resources_in_group:
                         node_id = f'node_{node_counter}'
                         node_counter += 1
                         node_ids[f'{resource.resource_type}.{resource.name}'] = node_id
-                        
+                        sub_node_ids.append(node_id)
+            
                         resource_config = get_resource_config(config, resource.resource_type)
                         display_name = get_display_name(resource, resource_config)
                         icon_path = resource_config.get('diagram_image', '')
-                        
-                        # Create HTML-like label with icon and formatted text
+            
                         label = _create_node_label(resource.resource_type, display_name, icon_path)
                         sub_cluster.node(node_id, label=label)
+            
+                    # >>> NEU: Grid erzwingen (statt 1 Linie)
+                    _layout_nodes_in_grid(sub_cluster, sub_node_ids)
     
     # Remove extension from output_path if present
     output_base = str(Path(output_path).with_suffix(''))
@@ -345,24 +357,18 @@ def _create_node_label(resource_type: str, display_name: str, icon_path: str = '
     # Escape special characters in text for HTML
     resource_type_escaped = resource_type.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
     display_name_escaped = display_name.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-    
-    # Check if icon exists and convert to absolute path
+
     icon_cell = ''
     if icon_path:
-        # Convert to absolute path
         icon_abs_path = Path(icon_path).resolve()
-        
         if icon_abs_path.exists():
-            # Icon with fixed size - use absolute path
-            icon_cell = f'<TD WIDTH="48" HEIGHT="48" FIXEDSIZE="TRUE"><IMG SRC="{icon_abs_path}"/></TD>'
+            icon_cell = f'<TD WIDTH="44" HEIGHT="44" FIXEDSIZE="TRUE"><IMG SRC="{icon_abs_path}"/></TD>'
         else:
-            # If icon path is specified but doesn't exist, show a placeholder
-            icon_cell = '<TD WIDTH="48" HEIGHT="48" FIXEDSIZE="TRUE" BGCOLOR="#f1f3f4" BORDER="0"><FONT POINT-SIZE="24">📦</FONT></TD>'
-    
-    # Build HTML table with Google Cloud-inspired styling
+            icon_cell = '<TD WIDTH="44" HEIGHT="44" FIXEDSIZE="TRUE" BGCOLOR="#f1f3f4" BORDER="0"><FONT POINT-SIZE="22">📦</FONT></TD>'
+
     if icon_cell:
-        label = f'''<
-<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="10" BGCOLOR="white" STYLE="rounded">
+        return f'''<
+<TABLE BORDER="1" COLOR="#dadce0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="10" BGCOLOR="white">
   <TR>
     {icon_cell}
     <TD ALIGN="LEFT" BALIGN="LEFT">
@@ -371,10 +377,8 @@ def _create_node_label(resource_type: str, display_name: str, icon_path: str = '
     </TD>
   </TR>
 </TABLE>>'''
-    else:
-        # No icon, simpler layout
-        label = f'''<
-<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="12" BGCOLOR="white" STYLE="rounded">
+    return f'''<
+<TABLE BORDER="1" COLOR="#dadce0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="12" BGCOLOR="white">
   <TR>
     <TD ALIGN="LEFT" BALIGN="LEFT">
       <FONT POINT-SIZE="14" COLOR="#202124"><B>{resource_type_escaped}</B></FONT><BR/>
@@ -443,3 +447,33 @@ def _format_sub_group_label(sub_key: Tuple[str, ...]) -> str:
     
     return ' | '.join(parts)
 
+def _layout_nodes_in_grid(g: Digraph, node_ids: List[str], max_cols: int = 4) -> None:
+    """
+    Force a wrapped/grid layout inside a (sub)graph by adding invisible edges
+    and 'rank=same' rows. Prevents the 'everything in one line' layout.
+    """
+    n = len(node_ids)
+    if n <= 1:
+        return
+
+    # simple heuristic: 2..max_cols columns depending on count
+    cols = min(max_cols, max(2, int(n ** 0.5) + 1))
+
+    rows = [node_ids[i:i + cols] for i in range(0, n, cols)]
+
+    # Put nodes of each row on same rank
+    for r_idx, row in enumerate(rows):
+        with g.subgraph(name=f'rank_row_{r_idx}') as rg:
+            rg.attr(rank='same')
+            for nid in row:
+                rg.node(nid)
+
+        # Keep order inside the row
+        for i in range(len(row) - 1):
+            g.edge(row[i], row[i + 1], style='invis', weight='10', constraint='false')
+
+    # Stack rows top->bottom
+    for r_idx in range(len(rows) - 1):
+        a = rows[r_idx][0]
+        b = rows[r_idx + 1][0]
+        g.edge(a, b, style='invis', weight='2')
