@@ -77,95 +77,95 @@ jobs:
         
         # Create the standalone script
         standalone_script = '''#!/usr/bin/env python3
-"""
-Terravisualizer Standalone Script
+        """
+        Terravisualizer Standalone Script
+        
+        This is a self-contained script that includes all terravisualizer code.
+        No installation required - just ensure Python 3.7+ and Graphviz are installed.
+        
+        Usage: 
+          ./terravisualizer --file tfplan.json --config config.hcl
+          
+        Prerequisites:
+          - Python 3.7 or higher
+          - Graphviz (system package)
+            - Ubuntu/Debian: sudo apt-get install graphviz
+            - macOS: brew install graphviz
+            - Windows: Download from https://graphviz.org/download/
+        """
 
-This is a self-contained script that includes all terravisualizer code.
-No installation required - just ensure Python 3.7+ and Graphviz are installed.
+        import subprocess
+        import sys
+        import os
 
-Usage: 
-  ./terravisualizer --file tfplan.json --config config.hcl
-  
-Prerequisites:
-  - Python 3.7 or higher
-  - Graphviz (system package)
-    - Ubuntu/Debian: sudo apt-get install graphviz
-    - macOS: brew install graphviz
-    - Windows: Download from https://graphviz.org/download/
-"""
-
-import subprocess
-import sys
-import os
-
-# Check Python version
-if sys.version_info < (3, 7):
-    print("ERROR: Python 3.7 or higher is required")
-    sys.exit(1)
-
-# Check for graphviz
-def check_graphviz():
-    """Check if graphviz is installed."""
-    try:
-        subprocess.run(
-            ["dot", "-V"], 
-            capture_output=True, 
-            check=True
-        )
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        print("ERROR: Graphviz is not installed!", file=sys.stderr)
-        print("Please install it:", file=sys.stderr)
-        print("  Ubuntu/Debian: sudo apt-get install graphviz", file=sys.stderr)
-        print("  macOS: brew install graphviz", file=sys.stderr)
-        print("  Windows: Download from https://graphviz.org/download/", file=sys.stderr)
-        sys.exit(1)
-
-check_graphviz()
-
-# Install graphviz Python package if needed
-try:
-    import graphviz
-except ImportError:
-    print("Installing graphviz Python package...")
-    try:
-        subprocess.check_call([
-            sys.executable, "-m", "pip", "install", 
-            "graphviz>=0.20.0", "--quiet", "--user"
-        ])
-        # Python will automatically find the newly installed package on next import
-        import graphviz
-    except Exception as e:
-        print(f"ERROR: Failed to install graphviz Python package: {e}", file=sys.stderr)
-        print("Please install it manually: pip install graphviz", file=sys.stderr)
-        sys.exit(1)
-
-# ============================================================================
-# EMBEDDED TERRAVISUALIZER CODE
-# ============================================================================
-
-''' + f'''
-# --- terravisualizer/__init__.py ---
-{init_py}
-
-# --- terravisualizer/config_parser.py ---
-{config_parser_py}
-
-# --- terravisualizer/plan_parser.py ---
-{plan_parser_py}
-
-# --- terravisualizer/visualizer.py ---
-{visualizer_py}
-
-# --- terravisualizer/cli.py ---
-{cli_py}
-
-# ============================================================================
-# MAIN ENTRY POINT
-# ============================================================================
-
-if __name__ == "__main__":
-    main()
-'''
+        # Check Python version
+        if sys.version_info < (3, 7):
+            print("ERROR: Python 3.7 or higher is required")
+            sys.exit(1)
+        
+        # Check for graphviz
+        def check_graphviz():
+            """Check if graphviz is installed."""
+            try:
+                subprocess.run(
+                    ["dot", "-V"], 
+                    capture_output=True, 
+                    check=True
+                )
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                print("ERROR: Graphviz is not installed!", file=sys.stderr)
+                print("Please install it:", file=sys.stderr)
+                print("  Ubuntu/Debian: sudo apt-get install graphviz", file=sys.stderr)
+                print("  macOS: brew install graphviz", file=sys.stderr)
+                print("  Windows: Download from https://graphviz.org/download/", file=sys.stderr)
+                sys.exit(1)
+        
+        check_graphviz()
+        
+        # Install graphviz Python package if needed
+        try:
+            import graphviz
+        except ImportError:
+            print("Installing graphviz Python package...")
+            try:
+                subprocess.check_call([
+                    sys.executable, "-m", "pip", "install", 
+                    "graphviz>=0.20.0", "--quiet", "--user"
+                ])
+                # Python will automatically find the newly installed package on next import
+                import graphviz
+            except Exception as e:
+                print(f"ERROR: Failed to install graphviz Python package: {e}", file=sys.stderr)
+                print("Please install it manually: pip install graphviz", file=sys.stderr)
+                sys.exit(1)
+        
+        # ============================================================================
+        # EMBEDDED TERRAVISUALIZER CODE
+        # ============================================================================
+        
+        ''' + f'''
+        # --- terravisualizer/__init__.py ---
+        {init_py}
+        
+        # --- terravisualizer/config_parser.py ---
+        {config_parser_py}
+        
+        # --- terravisualizer/plan_parser.py ---
+        {plan_parser_py}
+        
+        # --- terravisualizer/visualizer.py ---
+        {visualizer_py}
+        
+        # --- terravisualizer/cli.py ---
+        {cli_py}
+        
+        # ============================================================================
+        # MAIN ENTRY POINT
+        # ============================================================================
+        
+        if __name__ == "__main__":
+            main()
+        '''
         
         # Write the standalone script
         with open("terravisualizer", "w") as f:
