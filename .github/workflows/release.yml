@@ -1,0 +1,168 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'  # Triggers on version tags like v1.0.0, v2.1.3, etc.
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install build wheel setuptools
+        sudo apt-get update
+        sudo apt-get install -y graphviz
+    
+    - name: Build package
+      run: |
+        python -m build
+    
+    - name: Get version from tag
+      id: get_version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+    
+    - name: Create standalone executable script
+      run: |
+        cat > terravisualizer-standalone << 'EOF'
+        #!/usr/bin/env python3
+        """
+        Terravisualizer Standalone Installer
+        
+        This script installs terravisualizer and its dependencies, then runs it.
+        Usage: curl -sSL https://github.com/masluse/terravisualizer/releases/latest/download/terravisualizer-standalone | python3 - --file tfplan.json
+        Or download and run: python3 terravisualizer-standalone --file tfplan.json
+        """
+        import subprocess
+        import sys
+        import os
+        
+        def install_terravisualizer():
+            """Install terravisualizer if not already installed."""
+            try:
+                import terravisualizer
+                print("Terravisualizer is already installed")
+            except ImportError:
+                print("Installing terravisualizer...")
+                subprocess.check_call([
+                    sys.executable, "-m", "pip", "install", 
+                    "terravisualizer", "--quiet"
+                ])
+                print("Terravisualizer installed successfully")
+        
+        def check_graphviz():
+            """Check if graphviz is installed."""
+            try:
+                subprocess.run(
+                    ["dot", "-V"], 
+                    capture_output=True, 
+                    check=True
+                )
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                print("WARNING: Graphviz is not installed!")
+                print("Please install it:")
+                print("  Ubuntu/Debian: sudo apt-get install graphviz")
+                print("  macOS: brew install graphviz")
+                print("  Windows: Download from https://graphviz.org/download/")
+                sys.exit(1)
+        
+        if __name__ == "__main__":
+            # Check for graphviz first
+            check_graphviz()
+            
+            # Install terravisualizer if needed
+            install_terravisualizer()
+            
+            # Import and run terravisualizer
+            from terravisualizer.cli import main
+            main()
+        EOF
+        chmod +x terravisualizer-standalone
+    
+    - name: Create release notes
+      run: |
+        cat > release_notes.md << EOF
+        # Terravisualizer ${{ steps.get_version.outputs.VERSION }}
+        
+        ## Installation
+        
+        ### Method 1: Install with pip
+        \`\`\`bash
+        pip install dist/terravisualizer-${{ steps.get_version.outputs.VERSION }}-py3-none-any.whl
+        \`\`\`
+        
+        ### Method 2: One-line installer (downloads and runs)
+        \`\`\`bash
+        curl -sSL https://github.com/masluse/terravisualizer/releases/download/v${{ steps.get_version.outputs.VERSION }}/terravisualizer-standalone | python3 - --file tfplan.json --config config.hcl
+        \`\`\`
+        
+        ### Method 3: Download standalone script
+        \`\`\`bash
+        curl -sSL -o terravisualizer-standalone https://github.com/masluse/terravisualizer/releases/download/v${{ steps.get_version.outputs.VERSION }}/terravisualizer-standalone
+        chmod +x terravisualizer-standalone
+        ./terravisualizer-standalone --file tfplan.json --config config.hcl
+        \`\`\`
+        
+        ## Prerequisites
+        
+        - Python 3.7 or higher
+        - Graphviz (system package)
+          - Ubuntu/Debian: \`sudo apt-get install graphviz\`
+          - macOS: \`brew install graphviz\`
+          - Windows: Download from https://graphviz.org/download/
+        
+        ## Usage
+        
+        \`\`\`bash
+        terravisualizer --file tfplan.json --config terravisualizer.hcl --output diagram.png
+        \`\`\`
+        
+        ## What's New
+        
+        - Hierarchical resource grouping
+        - Icon support for resource types
+        - Formatted node display (icon, type, name)
+        - Support for HCL and JSON configuration formats
+        - Multiple output formats (PNG, SVG, PDF)
+        EOF
+    
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          dist/*
+          terravisualizer-standalone
+        body_path: release_notes.md
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Upload to PyPI (optional)
+      if: github.repository == 'masluse/terravisualizer'
+      env:
+        TWINE_USERNAME: __token__
+        TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+      run: |
+        pip install twine
+        # Only upload if PYPI_API_TOKEN is set
+        if [ -n "$TWINE_PASSWORD" ]; then
+          twine upload dist/*
+        else
+          echo "Skipping PyPI upload - PYPI_API_TOKEN not set"
+        fi
+      continue-on-error: true

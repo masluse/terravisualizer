@@ -1,0 +1,13 @@
+# Example Configuration for Terravisualizer
+
+"google_compute_address" {
+    "grouped_by" = [values.project, values.region]
+    "diagram_image" = "icons/google_compute_address.png"
+    "name" = "values.name"
+}
+
+"google_compute_instance" {
+    "grouped_by" = [values.project, values.zone]
+    "diagram_image" = "icons/google_compute_instance.png"
+    "name" = "values.name"
+}
