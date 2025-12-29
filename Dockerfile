@@ -1,7 +1,8 @@
 # Multi-stage build for terravisualizer
 # Stage 1: Build the binary
-# Using Alpine 3.18 for better compatibility (older musl libc version)
-FROM python:3.11-alpine3.18 AS builder
+# Using Alpine 3.16 for better compatibility (older musl libc version)
+# This ensures the binary works on systems with older glibc/musl versions
+FROM python:3.11-alpine3.16 AS builder
 
 # Install build dependencies
 RUN apk add --no-cache \
@@ -34,8 +35,8 @@ RUN pyinstaller --onefile \
     terravisualizer/cli.py
 
 # Stage 2: Runtime image
-# Using Alpine 3.18 for consistency and compatibility
-FROM alpine:3.18
+# Using latest Alpine for the runtime container (has the newest Graphviz)
+FROM alpine:latest
 
 # Install runtime dependencies (Graphviz)
 RUN apk add --no-cache graphviz ttf-dejavu
