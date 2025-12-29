@@ -12,45 +12,17 @@ A Python CLI tool to visualize Terraform plans with graphically grouped resource
 
 ## Installation
 
-### Method 1: Install from PyPI (recommended)
+### Download and run the executable
+
+Download the Linux executable from the latest release:
 
 ```bash
-pip install terravisualizer
+curl -sSL -o terravisualizer https://github.com/masluse/terravisualizer/releases/latest/download/terravisualizer
+chmod +x terravisualizer
+./terravisualizer --file tfplan.json
 ```
 
-### Method 2: Install from GitHub releases
-
-Download and install the latest release:
-
-```bash
-# Download the wheel file from the latest release
-curl -sSL -o terravisualizer.whl https://github.com/masluse/terravisualizer/releases/latest/download/terravisualizer-*-py3-none-any.whl
-pip install terravisualizer.whl
-```
-
-### Method 3: One-line installer
-
-Run terravisualizer directly without manual installation:
-
-```bash
-curl -sSL https://github.com/masluse/terravisualizer/releases/latest/download/terravisualizer-standalone | python3 - --file tfplan.json --config config.hcl
-```
-
-Or download and run locally:
-
-```bash
-curl -sSL -o terravisualizer-standalone https://github.com/masluse/terravisualizer/releases/latest/download/terravisualizer-standalone
-chmod +x terravisualizer-standalone
-./terravisualizer-standalone --file tfplan.json --config config.hcl
-```
-
-### Method 4: Install from source
-
-```bash
-git clone https://github.com/masluse/terravisualizer.git
-cd terravisualizer
-pip install -e .
-```
+The executable comes with a default configuration embedded, so you can run it without providing a config file. If you need custom configuration, you can still provide one with the `--config` flag.
 
 ### Prerequisites
 
@@ -79,8 +51,10 @@ terravisualizer --file tfplan.json
 
 ### With Custom Configuration
 
+The executable includes a default configuration. To use your own:
+
 ```bash
-terravisualizer --file tfplan.json --config my_config.hcl --output my_diagram.png
+./terravisualizer --file tfplan.json --config my_config.hcl --output my_diagram.png
 ```
 
 ### Available Options
@@ -102,7 +76,7 @@ terraform show -json tfplan.binary > tfplan.json
 Then use terravisualizer:
 
 ```bash
-terravisualizer --file tfplan.json
+./terravisualizer --file tfplan.json
 ```
 
 ## Configuration File Format
@@ -187,7 +161,7 @@ icons/
 Given a Terraform plan with Google Cloud resources:
 
 ```bash
-terravisualizer --file gcp-plan.json --config terravisualizer.hcl --output gcp-diagram.png
+./terravisualizer --file gcp-plan.json --output gcp-diagram.png
 ```
 
 This will generate a diagram with:
@@ -197,32 +171,16 @@ This will generate a diagram with:
 
 ## Development
 
-### Running from source
+### Building the Executable
+
+To build the Linux executable:
 
 ```bash
-python -m terravisualizer --file tfplan.json
+pip install pyinstaller
+pyinstaller --onefile --add-data "terravisualizer.hcl:." --add-data "terravisualizer.json:." --add-data "icons:icons" --name terravisualizer terravisualizer/cli.py
 ```
 
-### Creating a Release
-
-To create a new release:
-
-1. Make sure all changes are committed
-2. Run the release script:
-   ```bash
-   ./create_release.sh v1.0.0
-   ```
-3. The GitHub Actions workflow will automatically:
-   - Build the Python package
-   - Create a GitHub release with downloadable artifacts
-   - Upload to PyPI (if configured)
-
-The release will include:
-- Python wheel files (`.whl`)
-- Standalone installer script
-- Release notes
-
-Users can then install using any of the methods described in the Installation section.
+The executable will be created in the `dist/` directory.
 
 ### Project Structure
 
