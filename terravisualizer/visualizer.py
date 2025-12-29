@@ -271,8 +271,8 @@ def generate_diagram(
     dot.attr(compound='true')
     dot.attr(concentrate='true')
     dot.attr(newrank='true')
-    dot.attr(pack='true')
-    dot.attr(packmode='clust')         # packt Cluster statt alles in eine Linie
+    # Note: pack and packmode attributes removed due to graphviz segfault when combining
+    # these attributes with HTML table labels in nested clusters (triggers SIGSEGV 11)
     dot.attr(nodesep='0.55')
     dot.attr(ranksep='0.85')
     dot.attr(pad='0.35')
@@ -363,12 +363,12 @@ def _create_node_label(resource_type: str, display_name: str, icon_path: str = '
         icon_abs_path = Path(icon_path).resolve()
         if icon_abs_path.exists():
             icon_cell = (
-                f'<TD WIDTH="56" HEIGHT="56" FIXEDSIZE="TRUE">'
+                f'<TD WIDTH="56" HEIGHT="56">'
                 f'<IMG SRC="{icon_abs_path}" SCALE="TRUE"/>'
                 f'</TD>'
             )
         else:
-            icon_cell = '<TD WIDTH="44" HEIGHT="44" FIXEDSIZE="TRUE" BGCOLOR="#f1f3f4" BORDER="0"><FONT POINT-SIZE="22">📦</FONT></TD>'
+            icon_cell = '<TD WIDTH="44" HEIGHT="44" BGCOLOR="#f1f3f4" BORDER="0"><FONT POINT-SIZE="22">📦</FONT></TD>'
 
     if icon_cell:
         return f'''<
