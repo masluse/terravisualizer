@@ -38,60 +38,143 @@ jobs:
     
     - name: Create standalone executable script
       run: |
-        cat > terravisualizer-standalone << 'EOF'
+        python3 << 'PYTHON_SCRIPT'
         #!/usr/bin/env python3
         """
-        Terravisualizer Standalone Installer
-        
-        This script installs terravisualizer and its dependencies, then runs it.
-        Usage: curl -sSL https://github.com/masluse/terravisualizer/releases/latest/download/terravisualizer-standalone | python3 - --file tfplan.json
-        Or download and run: python3 terravisualizer-standalone --file tfplan.json
+        Script to create a standalone terravisualizer executable
+        with all code embedded.
         """
-        import subprocess
-        import sys
         import os
+        import re
+        from pathlib import Path
         
-        def install_terravisualizer():
-            """Install terravisualizer if not already installed."""
-            try:
-                import terravisualizer
-                print("Terravisualizer is already installed")
-            except ImportError:
-                print("Installing terravisualizer...")
-                subprocess.check_call([
-                    sys.executable, "-m", "pip", "install", 
-                    "terravisualizer", "--quiet"
-                ])
-                print("Terravisualizer installed successfully")
+        # Read all module files
+        init_py = Path("terravisualizer/__init__.py").read_text()
+        cli_py = Path("terravisualizer/cli.py").read_text()
+        config_parser_py = Path("terravisualizer/config_parser.py").read_text()
+        plan_parser_py = Path("terravisualizer/plan_parser.py").read_text()
+        visualizer_py = Path("terravisualizer/visualizer.py").read_text()
         
-        def check_graphviz():
-            """Check if graphviz is installed."""
-            try:
-                subprocess.run(
-                    ["dot", "-V"], 
-                    capture_output=True, 
-                    check=True
-                )
-            except (subprocess.CalledProcessError, FileNotFoundError):
-                print("WARNING: Graphviz is not installed!")
-                print("Please install it:")
-                print("  Ubuntu/Debian: sudo apt-get install graphviz")
-                print("  macOS: brew install graphviz")
-                print("  Windows: Download from https://graphviz.org/download/")
-                sys.exit(1)
+        # Remove internal terravisualizer imports from each module
+        def remove_internal_imports(code):
+            """Remove imports from terravisualizer modules."""
+            lines = code.split('\n')
+            filtered_lines = []
+            for line in lines:
+                # Skip lines that import from terravisualizer (both styles)
+                if (line.strip().startswith('from terravisualizer') or 
+                    line.strip().startswith('import terravisualizer')):
+                    continue
+                filtered_lines.append(line)
+            return '\n'.join(filtered_lines)
         
-        if __name__ == "__main__":
-            # Check for graphviz first
-            check_graphviz()
-            
-            # Install terravisualizer if needed
-            install_terravisualizer()
-            
-            # Import and run terravisualizer
-            from terravisualizer.cli import main
-            main()
-        EOF
-        chmod +x terravisualizer-standalone
+        # Apply import removal to all modules for consistency
+        init_py = remove_internal_imports(init_py)
+        cli_py = remove_internal_imports(cli_py)
+        config_parser_py = remove_internal_imports(config_parser_py)
+        plan_parser_py = remove_internal_imports(plan_parser_py)
+        visualizer_py = remove_internal_imports(visualizer_py)
+        
+        # Create the standalone script
+        standalone_script = '''#!/usr/bin/env python3
+"""
+Terravisualizer Standalone Script
+
+This is a self-contained script that includes all terravisualizer code.
+No installation required - just ensure Python 3.7+ and Graphviz are installed.
+
+Usage: 
+  ./terravisualizer --file tfplan.json --config config.hcl
+  
+Prerequisites:
+  - Python 3.7 or higher
+  - Graphviz (system package)
+    - Ubuntu/Debian: sudo apt-get install graphviz
+    - macOS: brew install graphviz
+    - Windows: Download from https://graphviz.org/download/
+"""
+
+import subprocess
+import sys
+import os
+
+# Check Python version
+if sys.version_info < (3, 7):
+    print("ERROR: Python 3.7 or higher is required")
+    sys.exit(1)
+
+# Check for graphviz
+def check_graphviz():
+    """Check if graphviz is installed."""
+    try:
+        subprocess.run(
+            ["dot", "-V"], 
+            capture_output=True, 
+            check=True
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        print("ERROR: Graphviz is not installed!", file=sys.stderr)
+        print("Please install it:", file=sys.stderr)
+        print("  Ubuntu/Debian: sudo apt-get install graphviz", file=sys.stderr)
+        print("  macOS: brew install graphviz", file=sys.stderr)
+        print("  Windows: Download from https://graphviz.org/download/", file=sys.stderr)
+        sys.exit(1)
+
+check_graphviz()
+
+# Install graphviz Python package if needed
+try:
+    import graphviz
+except ImportError:
+    print("Installing graphviz Python package...")
+    try:
+        subprocess.check_call([
+            sys.executable, "-m", "pip", "install", 
+            "graphviz>=0.20.0", "--quiet", "--user"
+        ])
+        # Python will automatically find the newly installed package on next import
+        import graphviz
+    except Exception as e:
+        print(f"ERROR: Failed to install graphviz Python package: {e}", file=sys.stderr)
+        print("Please install it manually: pip install graphviz", file=sys.stderr)
+        sys.exit(1)
+
+# ============================================================================
+# EMBEDDED TERRAVISUALIZER CODE
+# ============================================================================
+
+''' + f'''
+# --- terravisualizer/__init__.py ---
+{init_py}
+
+# --- terravisualizer/config_parser.py ---
+{config_parser_py}
+
+# --- terravisualizer/plan_parser.py ---
+{plan_parser_py}
+
+# --- terravisualizer/visualizer.py ---
+{visualizer_py}
+
+# --- terravisualizer/cli.py ---
+{cli_py}
+
+# ============================================================================
+# MAIN ENTRY POINT
+# ============================================================================
+
+if __name__ == "__main__":
+    main()
+'''
+        
+        # Write the standalone script
+        with open("terravisualizer", "w") as f:
+            f.write(standalone_script)
+        
+        print("Standalone script created successfully")
+        PYTHON_SCRIPT
+        
+        chmod +x terravisualizer
     
     - name: Create release notes
       run: |
@@ -107,15 +190,17 @@ jobs:
         
         ### Method 2: One-line installer (downloads and runs)
         \`\`\`bash
-        curl -sSL https://github.com/masluse/terravisualizer/releases/download/v${{ steps.get_version.outputs.VERSION }}/terravisualizer-standalone | python3 - --file tfplan.json --config config.hcl
+        curl -sSL https://github.com/masluse/terravisualizer/releases/download/v${{ steps.get_version.outputs.VERSION }}/terravisualizer | python3 - --file tfplan.json --config config.hcl
         \`\`\`
         
-        ### Method 3: Download standalone script
+        ### Method 3: Download standalone script (fully self-contained, no installation needed)
         \`\`\`bash
-        curl -sSL -o terravisualizer-standalone https://github.com/masluse/terravisualizer/releases/download/v${{ steps.get_version.outputs.VERSION }}/terravisualizer-standalone
-        chmod +x terravisualizer-standalone
-        ./terravisualizer-standalone --file tfplan.json --config config.hcl
+        curl -sSL -o terravisualizer https://github.com/masluse/terravisualizer/releases/download/v${{ steps.get_version.outputs.VERSION }}/terravisualizer
+        chmod +x terravisualizer
+        ./terravisualizer --file tfplan.json --config config.hcl
         \`\`\`
+        
+        **Note**: Method 3 includes all terravisualizer code embedded in the script. No PyPI installation required!
         
         ## Prerequisites
         
@@ -145,7 +230,7 @@ jobs:
       with:
         files: |
           dist/*
-          terravisualizer-standalone
+          terravisualizer
         body_path: release_notes.md
         draft: false
         prerelease: false
