@@ -26,6 +26,17 @@ if [ ! -d examples ]; then
     echo "Error: examples directory not found"
     exit 1
 fi
+
+if [ ! -f examples/sample_tfplan.json ]; then
+    echo "Error: examples/sample_tfplan.json not found"
+    exit 1
+fi
+
+if [ ! -f examples/sample_config.hcl ]; then
+    echo "Error: examples/sample_config.hcl not found"
+    exit 1
+fi
+
 (
     cd examples
     docker run --rm -v "$(pwd)":/data terravisualizer:test \
