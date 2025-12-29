@@ -54,14 +54,16 @@ def main():
             sys.exit(1)
     else:
         # Try to find embedded config (for PyInstaller builds)
-        if hasattr(sys, '_MEIPASS'):
+        if hasattr(sys, '_MEIPASS') and isinstance(getattr(sys, '_MEIPASS', None), str):
             # Running as PyInstaller bundle
-            bundled_hcl = Path(sys._MEIPASS) / "terravisualizer.hcl"
-            bundled_json = Path(sys._MEIPASS) / "terravisualizer.json"
-            if bundled_hcl.exists():
-                config_file = bundled_hcl
-            elif bundled_json.exists():
-                config_file = bundled_json
+            meipass_dir = Path(sys._MEIPASS)
+            if meipass_dir.exists() and meipass_dir.is_dir():
+                bundled_hcl = meipass_dir / "terravisualizer.hcl"
+                bundled_json = meipass_dir / "terravisualizer.json"
+                if bundled_hcl.exists():
+                    config_file = bundled_hcl
+                elif bundled_json.exists():
+                    config_file = bundled_json
         
         # Fallback to local files if not bundled
         if not config_file:
