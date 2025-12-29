@@ -18,7 +18,6 @@ COPY requirements.txt .
 COPY setup.py .
 COPY terravisualizer/ terravisualizer/
 COPY terravisualizer.hcl .
-COPY terravisualizer.json .
 COPY icons/ icons/
 
 # Install Python dependencies
