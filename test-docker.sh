@@ -26,20 +26,22 @@ if [ ! -d examples ]; then
     echo "Error: examples directory not found"
     exit 1
 fi
-cd examples
-docker run --rm -v "$(pwd)":/data terravisualizer:test \
-  --file sample_tfplan.json \
-  --config sample_config.hcl \
-  --output test_diagram.png
-
-if [ -f test_diagram.png ]; then
-    echo "✓ Diagram generated successfully: test_diagram.png"
-    ls -lh test_diagram.png
-    rm test_diagram.png
-else
-    echo "✗ Failed to generate diagram"
-    exit 1
-fi
+(
+    cd examples
+    docker run --rm -v "$(pwd)":/data terravisualizer:test \
+      --file sample_tfplan.json \
+      --config sample_config.hcl \
+      --output test_diagram.png
+    
+    if [ -f test_diagram.png ]; then
+        echo "✓ Diagram generated successfully: test_diagram.png"
+        ls -lh test_diagram.png
+        rm test_diagram.png
+    else
+        echo "✗ Failed to generate diagram"
+        exit 1
+    fi
+)
 
 echo ""
 echo "===== All tests passed! ====="
