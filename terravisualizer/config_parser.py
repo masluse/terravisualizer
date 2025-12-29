@@ -43,8 +43,7 @@ def parse_hcl_to_dict(content: str) -> Dict[str, Any]:
         while pos < len(content) and brace_count > 0:
             if content[pos] == '{':
                 # Check if it's inside a string
-                # Simple check: look back for quote
-                in_string = False
+                # Simple check: count quotes before this position
                 look_back = pos - 1
                 quote_count = 0
                 while look_back >= start_pos:
@@ -55,7 +54,7 @@ def parse_hcl_to_dict(content: str) -> Dict[str, Any]:
                     brace_count += 1
             elif content[pos] == '}':
                 # Check if it's inside a string
-                in_string = False
+                # Simple check: count quotes before this position
                 look_back = pos - 1
                 quote_count = 0
                 while look_back >= start_pos:

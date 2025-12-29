@@ -109,9 +109,10 @@ def group_resources_hierarchically(
             parent_id = resource.get_value(group_id_field)
             
             if parent_id:
-                # Find parent resource
+                # Find parent resource - normalize parent_id for comparison
+                parent_id_lower = str(parent_id).lower()
                 for (parent_type, parent_id_val), potential_parent in parent_resources.items():
-                    if str(parent_id).lower() == parent_id_val.lower():
+                    if parent_id_lower == parent_id_val.lower():
                         parent_resource = potential_parent
                         resource_to_parent[resource] = parent_resource
                         break
@@ -220,12 +221,9 @@ def get_display_name(resource: Resource, resource_config: Dict[str, Any]) -> str
             field_path = match.strip()
             value = resource.get_value(field_path)
             
-            if value is not None:
-                # Replace ${field} with the actual value
-                result = result.replace(f'${{{match}}}', str(value))
-            else:
-                # If value not found, replace with empty string or field name
-                result = result.replace(f'${{{match}}}', '')
+            # Replace ${field} with the actual value (or empty string if not found)
+            replacement = str(value) if value is not None else ''
+            result = result.replace(f'${{{match}}}', replacement)
         
         # Clean up any double separators (e.g., "--" or " - ")
         result = re.sub(r'-{2,}', '-', result)
