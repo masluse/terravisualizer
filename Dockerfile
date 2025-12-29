@@ -27,7 +27,6 @@ RUN pip install --no-cache-dir -r requirements.txt pyinstaller==6.17.0
 # Build the standalone executable
 RUN pyinstaller --onefile \
     --add-data "terravisualizer.hcl:." \
-    --add-data "terravisualizer.json:." \
     --add-data "icons:icons" \
     --name terravisualizer \
     terravisualizer/cli.py
