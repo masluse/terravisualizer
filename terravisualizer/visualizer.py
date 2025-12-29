@@ -314,7 +314,9 @@ def generate_diagram(
             
             # Check if we need sub-clusters or can place resources directly
             # If there's only one sub-group and it's named 'resources', skip sub-clustering
-            needs_sub_clusters = len(sub_groups) > 1 or not any('resources' == str(k) for k in sub_groups.keys())
+            has_multiple_sub_groups = len(sub_groups) > 1
+            has_non_resource_groups = not any('resources' == str(k) for k in sub_groups.keys())
+            needs_sub_clusters = has_multiple_sub_groups or has_non_resource_groups
             
             if not needs_sub_clusters and len(sub_groups) == 1:
                 # Place resources directly in the outer cluster
