@@ -265,72 +265,120 @@ def generate_diagram(
     # Create directed graph with improved layout settings
     dot = Digraph(comment='Terraform Resources', engine='dot')
     
-    # Layout / Packing
-    dot.attr(rankdir='LR')
-    dot.attr(splines='polyline')          # rechte Winkel wie GCP-Diagramme
+    # Layout - Left to Right for cleaner project arrangement
+    dot.attr(rankdir='LR')  # Left to Right for horizontal project flow
+    dot.attr(splines='ortho')  # ortho for cleaner right angles like cloud diagrams
     dot.attr(compound='true')
-    dot.attr(concentrate='true')
+    dot.attr(concentrate='false')  # Changed to false to avoid edge overlap
     dot.attr(newrank='true')
     # Note: pack and packmode attributes removed due to graphviz segfault when combining
     # these attributes with HTML table labels in nested clusters (triggers SIGSEGV 11)
-    dot.attr(nodesep='0.55')
-    dot.attr(ranksep='0.85')
-    dot.attr(pad='0.35')
-    dot.attr(margin='0.2')
-    dot.attr(dpi='144')
+    dot.attr(nodesep='0.85')  # Increased for better spacing
+    dot.attr(ranksep='1.5')   # Increased for better horizontal spacing between projects
+    dot.attr(pad='0.5')       # Increased padding
+    dot.attr(margin='0.3')
+    dot.attr(dpi='150')       # Slightly higher DPI for sharper output
     
     # Graph look
-    dot.attr(bgcolor='#f5f5f5')
+    dot.attr(bgcolor='#f8f9fa')  # Slightly lighter background
     dot.attr(fontname='Helvetica,Arial,sans-serif')
     dot.attr(fontsize='12')
     
     # Defaults
     dot.attr('node', shape='plaintext', fontname='Helvetica,Arial,sans-serif')
-    dot.attr('edge', color='#5f6368', penwidth='1.2', arrowsize='0.7')
+    dot.attr('edge', color='#5f6368', penwidth='1.5', arrowsize='0.8')
     
     # Track node IDs
     node_counter = 0
     node_ids = {}
     
+    # Sort groups: ungrouped first, then alphabetically
+    def sort_key(item):
+        key, _ = item
+        if key == ('ungrouped',):
+            return (0, '')  # Put ungrouped first
+        return (1, str(key))  # Then sort alphabetically
+    
+    sorted_groups = sorted(grouped.items(), key=sort_key)
+    
     # Create outer clusters for each top-level group
-    for outer_key, sub_groups in sorted(grouped.items()):
+    for outer_key, sub_groups in sorted_groups:
         outer_cluster_name = f'cluster_outer_{abs(hash(outer_key))}'
         
         with dot.subgraph(name=outer_cluster_name) as outer_cluster:
             # Set outer cluster label with improved styling
             outer_label = _format_outer_group_label(outer_key)
-            outer_cluster.attr(label=outer_label, fontsize='18', fontname='Helvetica-Bold,Arial-Bold,sans-serif-bold')
-            outer_cluster.attr(style='filled,rounded', color='#4285f4', fillcolor='#e8f0fe', penwidth='2')
-            outer_cluster.attr(margin='20')
+            outer_cluster.attr(label=outer_label, fontsize='20', fontname='Helvetica-Bold,Arial-Bold,sans-serif-bold')
+            outer_cluster.attr(style='filled,rounded', color='#4285f4', fillcolor='#e8f0fe', penwidth='2.5')
+            outer_cluster.attr(margin='25')
             
-            # Create sub-clusters within the outer cluster
-            for sub_key, resources_in_group in sorted(sub_groups.items()):
-                sub_cluster_name = f'cluster_sub_{abs(hash((outer_key, sub_key)))}'
+            # Check if we need sub-clusters or can place resources directly
+            # If there's only one sub-group and it's named 'resources', skip sub-clustering
+            needs_sub_clusters = len(sub_groups) > 1 or not any('resources' == str(k) for k in sub_groups.keys())
             
-                with outer_cluster.subgraph(name=sub_cluster_name) as sub_cluster:
-                    sub_label = _format_sub_group_label(sub_key)
-                    sub_cluster.attr(label=sub_label, fontsize='14', fontname='Helvetica,Arial,sans-serif')
-                    sub_cluster.attr(style='filled,rounded', color='#dadce0', fillcolor='#ffffff', penwidth='1.5')
-                    sub_cluster.attr(margin='14')
-            
-                    # >>> NEU: IDs sammeln
-                    sub_node_ids: List[str] = []
-            
-                    for resource in resources_in_group:
-                        node_id = f'node_{node_counter}'
-                        node_counter += 1
-                        node_ids[f'{resource.resource_type}.{resource.name}'] = node_id
-                        sub_node_ids.append(node_id)
-            
-                        resource_config = get_resource_config(config, resource.resource_type)
-                        display_name = get_display_name(resource, resource_config)
-                        icon_path = resource_config.get('diagram_image', '')
-            
-                        label = _create_node_label(resource.resource_type, display_name, icon_path)
-                        sub_cluster.node(node_id, label=label)
-            
-                    # >>> NEU: Grid erzwingen (statt 1 Linie)
-                    _layout_nodes_in_grid(sub_cluster, sub_node_ids)
+            if not needs_sub_clusters and len(sub_groups) == 1:
+                # Place resources directly in the outer cluster
+                sub_key, resources_in_group = list(sub_groups.items())[0]
+                sub_node_ids: List[str] = []
+                
+                for resource in resources_in_group:
+                    node_id = f'node_{node_counter}'
+                    node_counter += 1
+                    node_ids[f'{resource.resource_type}.{resource.name}'] = node_id
+                    sub_node_ids.append(node_id)
+                    
+                    resource_config = get_resource_config(config, resource.resource_type)
+                    display_name = get_display_name(resource, resource_config)
+                    icon_path = resource_config.get('diagram_image', '')
+                    
+                    label = _create_node_label(resource.resource_type, display_name, icon_path)
+                    outer_cluster.node(node_id, label=label)
+                
+                # Layout nodes in grid
+                _layout_nodes_in_grid(outer_cluster, sub_node_ids, max_cols=3)
+            else:
+                # Create sub-clusters within the outer cluster
+                for sub_key, resources_in_group in sorted(sub_groups.items()):
+                    sub_cluster_name = f'cluster_sub_{abs(hash((outer_key, sub_key)))}'
+                    
+                    # Check if this is a parent-child relationship
+                    is_parent_child = any(':' in str(k) for k in [sub_key])
+                    
+                    with outer_cluster.subgraph(name=sub_cluster_name) as sub_cluster:
+                        sub_label = _format_sub_group_label(sub_key)
+                        
+                        # Different styling for parent-child relationships
+                        if is_parent_child and sub_label:
+                            sub_cluster.attr(label=sub_label, fontsize='15', fontname='Helvetica-Bold,Arial-Bold,sans-serif-bold')
+                            sub_cluster.attr(style='filled,rounded', color='#34a853', fillcolor='#e6f4ea', penwidth='2')
+                            sub_cluster.attr(margin='16')
+                        elif sub_label:
+                            sub_cluster.attr(label=sub_label, fontsize='14', fontname='Helvetica,Arial,sans-serif')
+                            sub_cluster.attr(style='filled,rounded', color='#dadce0', fillcolor='#ffffff', penwidth='1.5')
+                            sub_cluster.attr(margin='14')
+                        else:
+                            # No label, minimal styling
+                            sub_cluster.attr(label='', fontsize='14')
+                            sub_cluster.attr(style='filled,rounded', color='#e8eaed', fillcolor='#ffffff', penwidth='1')
+                            sub_cluster.attr(margin='10')
+                        
+                        sub_node_ids: List[str] = []
+                        
+                        for resource in resources_in_group:
+                            node_id = f'node_{node_counter}'
+                            node_counter += 1
+                            node_ids[f'{resource.resource_type}.{resource.name}'] = node_id
+                            sub_node_ids.append(node_id)
+                            
+                            resource_config = get_resource_config(config, resource.resource_type)
+                            display_name = get_display_name(resource, resource_config)
+                            icon_path = resource_config.get('diagram_image', '')
+                            
+                            label = _create_node_label(resource.resource_type, display_name, icon_path)
+                            sub_cluster.node(node_id, label=label)
+                        
+                        # Layout nodes in grid (smaller max_cols for sub-clusters)
+                        _layout_nodes_in_grid(sub_cluster, sub_node_ids, max_cols=2)
     
     # Remove extension from output_path if present
     output_base = str(Path(output_path).with_suffix(''))
@@ -355,43 +403,44 @@ def _create_node_label(resource_type: str, display_name: str, icon_path: str = '
         HTML-like label string for Graphviz
     """
     # Escape special characters in text for HTML
-    resource_type_escaped = _ellipsize(resource_type.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;'), 28)
-    display_name_escaped = _ellipsize(display_name.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;'), 52)
+    resource_type_escaped = _ellipsize(resource_type.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;'), 30)
+    display_name_escaped = _ellipsize(display_name.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;'), 40)
 
     icon_cell = ''
     if icon_path:
         icon_abs_path = Path(icon_path).resolve()
         if icon_abs_path.exists():
             icon_cell = (
-                f'<TD WIDTH="56" HEIGHT="56">'
+                f'<TD WIDTH="60" HEIGHT="60" FIXEDSIZE="TRUE">'
                 f'<IMG SRC="{icon_abs_path}" SCALE="TRUE"/>'
                 f'</TD>'
             )
         else:
-            icon_cell = '<TD WIDTH="44" HEIGHT="44" BGCOLOR="#f1f3f4" BORDER="0"><FONT POINT-SIZE="22">📦</FONT></TD>'
+            # Placeholder icon with better styling
+            icon_cell = '<TD WIDTH="50" HEIGHT="50" FIXEDSIZE="TRUE" BGCOLOR="#e8f0fe" BORDER="1" COLOR="#4285f4"><FONT POINT-SIZE="26">📦</FONT></TD>'
 
     if icon_cell:
         return f'''<
-<TABLE BORDER="1" COLOR="#dadce0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="10" BGCOLOR="white">
+<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="12" BGCOLOR="white" STYLE="rounded">
   <TR>
     {icon_cell}
     <TD ALIGN="LEFT" BALIGN="LEFT">
-      <FONT POINT-SIZE="14" COLOR="#202124"><B>{resource_type_escaped}</B></FONT><BR/>
-      <FONT POINT-SIZE="11" COLOR="#5f6368">{display_name_escaped}</FONT>
-    </TD>
-  </TR>
-</TABLE>>'''
-    return f'''<
-<TABLE BORDER="1" COLOR="#dadce0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="12" BGCOLOR="white">
-  <TR>
-    <TD ALIGN="LEFT" BALIGN="LEFT">
-      <FONT POINT-SIZE="14" COLOR="#202124"><B>{resource_type_escaped}</B></FONT><BR/>
-      <FONT POINT-SIZE="11" COLOR="#5f6368">{display_name_escaped}</FONT>
+      <FONT POINT-SIZE="15" COLOR="#202124"><B>{resource_type_escaped}</B></FONT><BR/>
+      <FONT POINT-SIZE="10" COLOR="#5f6368">{display_name_escaped}</FONT>
     </TD>
   </TR>
 </TABLE>>'''
     
-    return label
+    # No icon version with better styling
+    return f'''<
+<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="14" BGCOLOR="white" STYLE="rounded">
+  <TR>
+    <TD ALIGN="CENTER" BALIGN="CENTER">
+      <FONT POINT-SIZE="15" COLOR="#202124"><B>{resource_type_escaped}</B></FONT><BR/>
+      <FONT POINT-SIZE="10" COLOR="#5f6368">{display_name_escaped}</FONT>
+    </TD>
+  </TR>
+</TABLE>>'''
 
 
 def _format_outer_group_label(group_key: Tuple[str, ...]) -> str:
@@ -451,36 +500,47 @@ def _format_sub_group_label(sub_key: Tuple[str, ...]) -> str:
     
     return ' | '.join(parts)
 
-def _layout_nodes_in_grid(g: Digraph, node_ids: List[str], max_cols: int = 4) -> None:
+def _layout_nodes_in_grid(g: Digraph, node_ids: List[str], max_cols: int = 3) -> None:
     """
     Force a wrapped/grid layout inside a (sub)graph by adding invisible edges
     and 'rank=same' rows. Prevents the 'everything in one line' layout.
+    Creates a more cloud-provider-like grid arrangement.
+    
+    Args:
+        g: The graph/subgraph to layout
+        node_ids: List of node IDs to arrange
+        max_cols: Maximum columns per row (default 3 for better cloud-like layout)
     """
     n = len(node_ids)
     if n <= 1:
         return
 
-    # simple heuristic: 2..max_cols columns depending on count
-    cols = min(max_cols, max(2, int(n ** 0.5) + 1))
+    # Calculate optimal columns: prefer 2-3 columns for cleaner look
+    if n <= 3:
+        cols = n  # Single row
+    elif n <= 6:
+        cols = 2  # 2 columns
+    else:
+        cols = min(max_cols, max(2, int(n ** 0.5)))
 
     rows = [node_ids[i:i + cols] for i in range(0, n, cols)]
 
     # Put nodes of each row on same rank
     for r_idx, row in enumerate(rows):
-        with g.subgraph(name=f'rank_row_{r_idx}') as rg:
+        with g.subgraph(name=f'rank_row_{abs(hash(tuple(row)))}') as rg:
             rg.attr(rank='same')
             for nid in row:
                 rg.node(nid)
 
-        # Keep order inside the row
+        # Keep order inside the row with invisible edges
         for i in range(len(row) - 1):
-            g.edge(row[i], row[i + 1], style='invis', weight='10', constraint='false')
+            g.edge(row[i], row[i + 1], style='invis', weight='15')
 
-    # Stack rows top->bottom
+    # Stack rows top->bottom with invisible edges for proper alignment
     for r_idx in range(len(rows) - 1):
         a = rows[r_idx][0]
         b = rows[r_idx + 1][0]
-        g.edge(a, b, style='invis', weight='2')
+        g.edge(a, b, style='invis', weight='5')
 
 def _ellipsize(s: str, n: int = 42) -> str:
     return s if len(s) <= n else s[: n - 1] + "…"
