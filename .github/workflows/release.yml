@@ -167,14 +167,14 @@ jobs:
             main()
         '''
         
-        # Write the standalone script
-        with open("terravisualizer", "w") as f:
+        # Write the standalone script to dist directory to avoid conflict with terravisualizer/ directory
+        with open("dist/terravisualizer", "w") as f:
             f.write(standalone_script)
         
         print("Standalone script created successfully")
         PYTHON_SCRIPT
         
-        chmod +x terravisualizer
+        chmod +x dist/terravisualizer
     
     - name: Create release notes
       run: |
@@ -230,7 +230,6 @@ jobs:
       with:
         files: |
           dist/*
-          terravisualizer
         body_path: release_notes.md
         draft: false
         prerelease: false
