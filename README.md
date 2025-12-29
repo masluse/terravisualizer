@@ -12,7 +12,17 @@ A Python CLI tool to visualize Terraform plans with graphically grouped resource
 
 ## Installation
 
-### Download and run the executable
+### Option 1: Docker (Recommended)
+
+Run directly with Docker - no installation required, all dependencies included:
+
+```bash
+docker run --rm -v $(pwd):/data ghcr.io/masluse/terravisualizer:latest --file tfplan.json
+```
+
+This is the easiest way to get started as the Docker image includes Graphviz and all other dependencies.
+
+### Option 2: Download and run the executable
 
 Download the Linux executable from the latest release:
 
@@ -24,7 +34,9 @@ chmod +x terravisualizer
 
 The executable comes with a default configuration embedded, so you can run it without providing a config file. If you need custom configuration, you can still provide one with the `--config` flag.
 
-### Prerequisites
+**Note:** When using the standalone executable, you need to have Graphviz installed on your system.
+
+### Prerequisites for Standalone Executable
 
 You need to have Graphviz installed on your system:
 
@@ -43,7 +55,32 @@ Download and install from [graphviz.org](https://graphviz.org/download/)
 
 ## Usage
 
-### Basic Usage
+### Docker Usage
+
+Basic usage:
+```bash
+docker run --rm -v $(pwd):/data ghcr.io/masluse/terravisualizer:latest --file tfplan.json
+```
+
+With custom configuration:
+```bash
+docker run --rm -v $(pwd):/data ghcr.io/masluse/terravisualizer:latest \
+  --file tfplan.json \
+  --config my_config.hcl \
+  --output diagram.png
+```
+
+Different output format:
+```bash
+docker run --rm -v $(pwd):/data ghcr.io/masluse/terravisualizer:latest \
+  --file tfplan.json \
+  --output diagram.svg \
+  --format svg
+```
+
+### Standalone Executable Usage
+
+Basic Usage
 
 ```bash
 terravisualizer --file tfplan.json
