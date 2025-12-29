@@ -271,7 +271,8 @@ def generate_diagram(
     dot.attr(compound='true')
     dot.attr(concentrate='true')
     dot.attr(newrank='true')
-    # Note: pack and packmode attributes removed due to graphviz segfault with HTML labels in nested clusters
+    # Note: pack and packmode attributes removed due to graphviz segfault when combining
+    # these attributes with HTML table labels in nested clusters (triggers SIGSEGV 11)
     dot.attr(nodesep='0.55')
     dot.attr(ranksep='0.85')
     dot.attr(pad='0.35')
