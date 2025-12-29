@@ -40,10 +40,6 @@ ENV/
 htmlcov/
 .tox/
 
-# Documentation
-*.md
-!README.md
-
 # Misc
 .DS_Store
 *.log

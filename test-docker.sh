@@ -22,6 +22,10 @@ docker run --rm terravisualizer:test --help
 
 echo ""
 echo "3. Testing with sample files..."
+if [ ! -d examples ]; then
+    echo "Error: examples directory not found"
+    exit 1
+fi
 cd examples
 docker run --rm -v "$(pwd)":/data terravisualizer:test \
   --file sample_tfplan.json \
