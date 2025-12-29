@@ -54,9 +54,10 @@ def main():
             sys.exit(1)
     else:
         # Try to find embedded config (for PyInstaller builds)
-        if hasattr(sys, '_MEIPASS') and isinstance(getattr(sys, '_MEIPASS', None), str):
+        meipass = getattr(sys, '_MEIPASS', None)
+        if meipass and isinstance(meipass, str):
             # Running as PyInstaller bundle
-            meipass_dir = Path(sys._MEIPASS)
+            meipass_dir = Path(meipass)
             if meipass_dir.exists() and meipass_dir.is_dir():
                 bundled_hcl = meipass_dir / "terravisualizer.hcl"
                 bundled_json = meipass_dir / "terravisualizer.json"
