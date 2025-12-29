@@ -209,7 +209,7 @@ def generate_diagram(
                         
                         resource_config = get_resource_config(config, resource.resource_type)
                         display_name = get_display_name(resource, resource_config)
-                        icon_path = resource_config.get('diagramm_image', '')
+                        icon_path = resource_config.get('diagram_image', '')
                         
                         # Create HTML-like label with icon and formatted text
                         label = _create_node_label(resource.resource_type, display_name, icon_path)

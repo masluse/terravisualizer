@@ -14,7 +14,7 @@ def parse_hcl_to_dict(content: str) -> Dict[str, Any]:
     {
         "resource_type" {
             "grouped_by" = [values.project, values.region]
-            "diagramm_image" = "path/to/icon"
+            "diagram_image" = "path/to/icon"
             "name" = "value.name"
         }
     }

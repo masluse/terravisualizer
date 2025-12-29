@@ -12,7 +12,39 @@ A Python CLI tool to visualize Terraform plans with graphically grouped resource
 
 ## Installation
 
-### From source
+### Method 1: Install from PyPI (recommended)
+
+```bash
+pip install terravisualizer
+```
+
+### Method 2: Install from GitHub releases
+
+Download and install the latest release:
+
+```bash
+# Download the wheel file from the latest release
+curl -sSL -o terravisualizer.whl https://github.com/masluse/terravisualizer/releases/latest/download/terravisualizer-*-py3-none-any.whl
+pip install terravisualizer.whl
+```
+
+### Method 3: One-line installer
+
+Run terravisualizer directly without manual installation:
+
+```bash
+curl -sSL https://github.com/masluse/terravisualizer/releases/latest/download/terravisualizer-standalone | python3 - --file tfplan.json --config config.hcl
+```
+
+Or download and run locally:
+
+```bash
+curl -sSL -o terravisualizer-standalone https://github.com/masluse/terravisualizer/releases/latest/download/terravisualizer-standalone
+chmod +x terravisualizer-standalone
+./terravisualizer-standalone --file tfplan.json --config config.hcl
+```
+
+### Method 4: Install from source
 
 ```bash
 git clone https://github.com/masluse/terravisualizer.git
@@ -81,13 +113,13 @@ The configuration file defines how resources should be grouped and displayed. It
 ```hcl
 "google_compute_address" {
     "grouped_by" = [values.project, values.region]
-    "diagramm_image" = "icons/google_compute_address.png"
+    "diagram_image" = "icons/google_compute_address.png"
     "name" = "values.name"
 }
 
 "aws_instance" {
     "grouped_by" = [values.availability_zone]
-    "diagramm_image" = "icons/aws_instance.png"
+    "diagram_image" = "icons/aws_instance.png"
     "name" = "values.tags.Name"
 }
 ```
@@ -97,12 +129,12 @@ The configuration file defines how resources should be grouped and displayed. It
 {
   "google_compute_address": {
     "grouped_by": ["values.project", "values.region"],
-    "diagramm_image": "icons/google_compute_address.png",
+    "diagram_image": "icons/google_compute_address.png",
     "name": "values.name"
   },
   "aws_instance": {
     "grouped_by": ["values.availability_zone"],
-    "diagramm_image": "icons/aws_instance.png",
+    "diagram_image": "icons/aws_instance.png",
     "name": "values.tags.Name"
   }
 }
@@ -113,7 +145,7 @@ The configuration file defines how resources should be grouped and displayed. It
 - `grouped_by`: Array of attribute paths to group resources by (e.g., `values.project`, `values.region`)
   - **The first attribute creates the outer group** - resources with the same value will be enclosed together regardless of type
   - Subsequent attributes create sub-groups within the outer group
-- `diagramm_image`: Path to an icon image for the resource (optional, PNG format recommended)
+- `diagram_image`: Path to an icon image for the resource (optional, PNG format recommended)
   - Icons are displayed on the left side of each resource in the diagram
   - Paths can be relative or absolute
   - If the icon file doesn't exist, a placeholder icon is shown
@@ -123,7 +155,7 @@ The configuration file defines how resources should be grouped and displayed. It
 ### Resource Display Format
 
 Each resource in the diagram is displayed with:
-1. **Icon** (left side): Optional image specified in `diagramm_image`
+1. **Icon** (left side): Optional image specified in `diagram_image`
 2. **Resource Type** (large bold text): e.g., "google_compute_address"
 3. **Display Name** (smaller text below): The value from the `name` field
 
@@ -170,6 +202,27 @@ This will generate a diagram with:
 ```bash
 python -m terravisualizer --file tfplan.json
 ```
+
+### Creating a Release
+
+To create a new release:
+
+1. Make sure all changes are committed
+2. Run the release script:
+   ```bash
+   ./create_release.sh v1.0.0
+   ```
+3. The GitHub Actions workflow will automatically:
+   - Build the Python package
+   - Create a GitHub release with downloadable artifacts
+   - Upload to PyPI (if configured)
+
+The release will include:
+- Python wheel files (`.whl`)
+- Standalone installer script
+- Release notes
+
+Users can then install using any of the methods described in the Installation section.
 
 ### Project Structure
 

@@ -3,24 +3,24 @@
 
 "google_compute_address" {
     "grouped_by" = [values.project, values.region]
-    "diagramm_image" = "icons/google_compute_address.png"
+    "diagram_image" = "icons/google_compute_address.png"
     "name" = "values.name"
 }
 
 "google_compute_instance" {
     "grouped_by" = [values.project, values.zone]
-    "diagramm_image" = "icons/google_compute_instance.png"
+    "diagram_image" = "icons/google_compute_instance.png"
     "name" = "values.name"
 }
 
 "aws_instance" {
     "grouped_by" = [values.availability_zone]
-    "diagramm_image" = "icons/aws_instance.png"
+    "diagram_image" = "icons/aws_instance.png"
     "name" = "values.tags.Name"
 }
 
 "aws_s3_bucket" {
     "grouped_by" = [values.region]
-    "diagramm_image" = "icons/aws_s3_bucket.png"
+    "diagram_image" = "icons/aws_s3_bucket.png"
     "name" = "values.bucket"
 }
