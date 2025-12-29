@@ -41,11 +41,11 @@
     "grouped_by" = [values.project, values.location]
     "diagram_image" = "icons/google_compute_address.png"
     "name" = "${values.name}"
-    "is_group" = true
+    "id"   = "values.name"
 }
 
 "google_container_node_pool" {
-    "grouped_by" = [values.project, values.location, value.cluster]
+    "group_id" = "value.cluster"
     "diagram_image" = "icons/google_compute_address.png"
     "name" = "${values.name}"
 }
