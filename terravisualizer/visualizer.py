@@ -267,7 +267,7 @@ def generate_diagram(
     
     # Layout / Packing
     dot.attr(rankdir='LR')
-    dot.attr(splines='ortho')          # rechte Winkel wie GCP-Diagramme
+    dot.attr(splines='polyline')          # rechte Winkel wie GCP-Diagramme
     dot.attr(compound='true')
     dot.attr(concentrate='true')
     dot.attr(newrank='true')
@@ -355,14 +355,18 @@ def _create_node_label(resource_type: str, display_name: str, icon_path: str = '
         HTML-like label string for Graphviz
     """
     # Escape special characters in text for HTML
-    resource_type_escaped = resource_type.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-    display_name_escaped = display_name.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+    resource_type_escaped = _ellipsize(resource_type.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;'), 28)
+    display_name_escaped = _ellipsize(display_name.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;'), 52)
 
     icon_cell = ''
     if icon_path:
         icon_abs_path = Path(icon_path).resolve()
         if icon_abs_path.exists():
-            icon_cell = f'<TD WIDTH="44" HEIGHT="44" FIXEDSIZE="TRUE"><IMG SRC="{icon_abs_path}"/></TD>'
+            icon_cell = (
+                f'<TD WIDTH="56" HEIGHT="56" FIXEDSIZE="TRUE">'
+                f'<IMG SRC="{icon_abs_path}" SCALE="TRUE"/>'
+                f'</TD>'
+            )
         else:
             icon_cell = '<TD WIDTH="44" HEIGHT="44" FIXEDSIZE="TRUE" BGCOLOR="#f1f3f4" BORDER="0"><FONT POINT-SIZE="22">📦</FONT></TD>'
 
@@ -477,3 +481,6 @@ def _layout_nodes_in_grid(g: Digraph, node_ids: List[str], max_cols: int = 4) ->
         a = rows[r_idx][0]
         b = rows[r_idx + 1][0]
         g.edge(a, b, style='invis', weight='2')
+
+def _ellipsize(s: str, n: int = 42) -> str:
+    return s if len(s) <= n else s[: n - 1] + "…"
