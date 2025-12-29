@@ -41,11 +41,11 @@
     "grouped_by" = [values.project, values.location]
     "diagram_image" = "icons/google_compute_address.png"
     "name" = "${values.name}"
-    "id"   = "values.name"
+    "id"   = "values.id"
 }
 
 "google_container_node_pool" {
-    "group_id" = "value.cluster"
+    "group_id" = "values.cluster"
     "diagram_image" = "icons/google_compute_address.png"
     "name" = "${values.name}"
 }
@@ -59,13 +59,13 @@
 "google_iap_web_region_backend_service_iam_member" {
     "grouped_by" = [values.project, values.web_region_backend_service]
     "diagram_image" = "icons/google_compute_address.png"
-    "name" = "${values.member}-${values.roles}"
+    "name" = "${values.member}-${values.role}"
 }
 
 "google_project_iam_member" {
     "grouped_by" = [values.project]
     "diagram_image" = "icons/google_compute_address.png"
-    "name" = "${values.member}-${values.roles}"
+    "name" = "${values.member}-${values.role}"
 }
 
 "google_secret_manager_secret" {

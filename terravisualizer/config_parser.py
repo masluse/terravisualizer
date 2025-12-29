@@ -25,35 +25,88 @@ def parse_hcl_to_dict(content: str) -> Dict[str, Any]:
     content = re.sub(r'#.*$', '', content, flags=re.MULTILINE)
     content = re.sub(r'//.*$', '', content, flags=re.MULTILINE)
     
-    # Find resource blocks
+    # Find resource blocks - use a more careful approach
     # Pattern: "resource_type" { ... }
-    block_pattern = r'"([^"]+)"\s*\{([^}]+)\}'
+    # We need to handle nested braces properly
     
-    for match in re.finditer(block_pattern, content):
+    resource_pattern = r'"([^"]+)"\s*\{'
+    
+    matches = list(re.finditer(resource_pattern, content))
+    
+    for i, match in enumerate(matches):
         resource_type = match.group(1)
-        block_content = match.group(2)
+        start_pos = match.end()
+        
+        # Find the matching closing brace
+        brace_count = 1
+        pos = start_pos
+        while pos < len(content) and brace_count > 0:
+            if content[pos] == '{':
+                # Check if it's inside a string
+                # Simple check: count quotes before this position
+                look_back = pos - 1
+                quote_count = 0
+                while look_back >= start_pos:
+                    if content[look_back] == '"' and (look_back == 0 or content[look_back-1] != '\\'):
+                        quote_count += 1
+                    look_back -= 1
+                if quote_count % 2 == 0:  # Even number of quotes means we're outside strings
+                    brace_count += 1
+            elif content[pos] == '}':
+                # Check if it's inside a string
+                # Simple check: count quotes before this position
+                look_back = pos - 1
+                quote_count = 0
+                while look_back >= start_pos:
+                    if content[look_back] == '"' and (look_back == 0 or content[look_back-1] != '\\'):
+                        quote_count += 1
+                    look_back -= 1
+                if quote_count % 2 == 0:  # Even number of quotes means we're outside strings
+                    brace_count -= 1
+            pos += 1
+        
+        block_content = content[start_pos:pos-1]
         
         resource_config = {}
         
-        # Parse key-value pairs
-        # Pattern for: "key" = value or "key" = [value1, value2]
-        kv_pattern = r'"([^"]+)"\s*=\s*(.+?)(?=\n\s*"|$)'
-        
-        for kv_match in re.finditer(kv_pattern, block_content, re.DOTALL):
-            key = kv_match.group(1)
-            value = kv_match.group(2).strip()
+        # Parse key-value pairs line by line
+        lines = block_content.strip().split('\n')
+        j = 0
+        while j < len(lines):
+            line = lines[j].strip()
             
-            # Parse array values
-            if value.startswith('[') and value.endswith(']'):
-                # Extract array elements
-                array_content = value[1:-1]
-                # Split by comma, handling nested structures
-                elements = [elem.strip() for elem in array_content.split(',')]
-                resource_config[key] = elements
-            else:
-                # Remove quotes from string values
-                value = value.strip('"\'')
-                resource_config[key] = value
+            # Skip empty lines
+            if not line:
+                j += 1
+                continue
+            
+            # Match key = value pattern
+            kv_match = re.match(r'"([^"]+)"\s*=\s*(.+)', line)
+            if kv_match:
+                key = kv_match.group(1)
+                value = kv_match.group(2).strip()
+                
+                # Parse array values
+                if value.startswith('['):
+                    # Check if array is complete on this line
+                    if not value.endswith(']'):
+                        # Multi-line array (unlikely in our case, but handle it)
+                        j += 1
+                        while j < len(lines) and not value.endswith(']'):
+                            value += ' ' + lines[j].strip()
+                            j += 1
+                    
+                    # Extract array elements
+                    array_content = value[1:-1]
+                    # Split by comma, handling nested structures
+                    elements = [elem.strip() for elem in array_content.split(',')]
+                    resource_config[key] = elements
+                else:
+                    # Remove quotes from string values
+                    value = value.strip('"\'')
+                    resource_config[key] = value
+            
+            j += 1
         
         config[resource_type] = resource_config
     
