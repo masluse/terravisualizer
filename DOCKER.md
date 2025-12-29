@@ -17,6 +17,8 @@ This command:
 - `-v $(pwd):/data`: Mounts your current directory to `/data` in the container
 - `--file tfplan.json`: Specifies the Terraform plan file to visualize
 
+**Note:** If your directory path contains spaces or special characters, quote the path: `-v "$(pwd)":/data`
+
 ## Usage Examples
 
 ### Generate a diagram from a Terraform plan

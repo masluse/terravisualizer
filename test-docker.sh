@@ -23,7 +23,7 @@ docker run --rm terravisualizer:test --help
 echo ""
 echo "3. Testing with sample files..."
 cd examples
-docker run --rm -v $(pwd):/data terravisualizer:test \
+docker run --rm -v "$(pwd)":/data terravisualizer:test \
   --file sample_tfplan.json \
   --config sample_config.hcl \
   --output test_diagram.png
