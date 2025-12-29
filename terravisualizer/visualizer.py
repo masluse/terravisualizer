@@ -176,7 +176,7 @@ def generate_diagram(
     # Create directed graph
     dot = Digraph(comment='Terraform Resources')
     dot.attr(rankdir='TB', splines='ortho', nodesep='0.5', ranksep='0.8')
-    dot.attr('node', shape='box', style='rounded,filled', fillcolor='lightblue')
+    dot.attr('node', shape='plaintext')  # Use plaintext for HTML-like labels
     
     # Track node IDs
     node_counter = 0
@@ -209,8 +209,10 @@ def generate_diagram(
                         
                         resource_config = get_resource_config(config, resource.resource_type)
                         display_name = get_display_name(resource, resource_config)
+                        icon_path = resource_config.get('diagramm_image', '')
                         
-                        label = f'{resource.resource_type}\\n{display_name}'
+                        # Create HTML-like label with icon and formatted text
+                        label = _create_node_label(resource.resource_type, display_name, icon_path)
                         sub_cluster.node(node_id, label=label)
     
     # Remove extension from output_path if present
@@ -220,6 +222,63 @@ def generate_diagram(
     dot.render(output_base, format=output_format, cleanup=True)
     
     return f'{output_base}.{output_format}'
+
+
+def _create_node_label(resource_type: str, display_name: str, icon_path: str = '') -> str:
+    """
+    Create an HTML-like label for a node with optional icon, resource type, and name.
+    
+    Args:
+        resource_type: The resource type (shown as big name)
+        display_name: The display name (shown as small name)
+        icon_path: Path to the icon image (optional)
+        
+    Returns:
+        HTML-like label string for Graphviz
+    """
+    # Escape special characters in text for HTML
+    resource_type_escaped = resource_type.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+    display_name_escaped = display_name.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+    
+    # Check if icon exists and convert to absolute path
+    icon_cell = ''
+    if icon_path:
+        # Convert to absolute path
+        icon_abs_path = Path(icon_path).resolve()
+        
+        if icon_abs_path.exists():
+            # Icon with fixed size - use absolute path
+            icon_cell = f'<TD WIDTH="48" HEIGHT="48" FIXEDSIZE="TRUE"><IMG SRC="{icon_abs_path}"/></TD>'
+        else:
+            # If icon path is specified but doesn't exist, show a placeholder
+            # Use a simple emoji or text as fallback
+            icon_cell = '<TD WIDTH="48" HEIGHT="48" FIXEDSIZE="TRUE" BGCOLOR="#e0e0e0" BORDER="0">📦</TD>'
+    
+    # Build HTML table
+    if icon_cell:
+        label = f'''<
+<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="6" BGCOLOR="lightblue">
+  <TR>
+    {icon_cell}
+    <TD ALIGN="LEFT" BALIGN="LEFT">
+      <FONT POINT-SIZE="13"><B>{resource_type_escaped}</B></FONT><BR/>
+      <FONT POINT-SIZE="11" COLOR="#555555">{display_name_escaped}</FONT>
+    </TD>
+  </TR>
+</TABLE>>'''
+    else:
+        # No icon, simpler layout
+        label = f'''<
+<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="8" BGCOLOR="lightblue">
+  <TR>
+    <TD ALIGN="LEFT" BALIGN="LEFT">
+      <FONT POINT-SIZE="13"><B>{resource_type_escaped}</B></FONT><BR/>
+      <FONT POINT-SIZE="11" COLOR="#555555">{display_name_escaped}</FONT>
+    </TD>
+  </TR>
+</TABLE>>'''
+    
+    return label
 
 
 def _format_outer_group_label(group_key: Tuple[str, ...]) -> str:

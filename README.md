@@ -75,27 +75,57 @@ terravisualizer --file tfplan.json
 
 ## Configuration File Format
 
-The configuration file defines how resources should be grouped and displayed. It supports an HCL-like format:
+The configuration file defines how resources should be grouped and displayed. It supports both HCL-like and JSON formats:
 
+**HCL format:**
 ```hcl
 "google_compute_address" {
     "grouped_by" = [values.project, values.region]
-    "diagramm_image" = "../icons/google_compute_address"
+    "diagramm_image" = "icons/google_compute_address.png"
     "name" = "values.name"
 }
 
 "aws_instance" {
     "grouped_by" = [values.availability_zone]
-    "diagramm_image" = "../icons/aws_instance"
+    "diagramm_image" = "icons/aws_instance.png"
     "name" = "values.tags.Name"
+}
+```
+
+**JSON format:**
+```json
+{
+  "google_compute_address": {
+    "grouped_by": ["values.project", "values.region"],
+    "diagramm_image": "icons/google_compute_address.png",
+    "name": "values.name"
+  },
+  "aws_instance": {
+    "grouped_by": ["values.availability_zone"],
+    "diagramm_image": "icons/aws_instance.png",
+    "name": "values.tags.Name"
+  }
 }
 ```
 
 ### Configuration Options
 
 - `grouped_by`: Array of attribute paths to group resources by (e.g., `values.project`, `values.region`)
-- `diagramm_image`: Path to an icon for the resource (optional)
+  - **The first attribute creates the outer group** - resources with the same value will be enclosed together regardless of type
+  - Subsequent attributes create sub-groups within the outer group
+- `diagramm_image`: Path to an icon image for the resource (optional, PNG format recommended)
+  - Icons are displayed on the left side of each resource in the diagram
+  - Paths can be relative or absolute
+  - If the icon file doesn't exist, a placeholder icon is shown
 - `name`: Attribute path to use as the display name (default: `name`)
+  - Displayed below the resource type in smaller text
+
+### Resource Display Format
+
+Each resource in the diagram is displayed with:
+1. **Icon** (left side): Optional image specified in `diagramm_image`
+2. **Resource Type** (large bold text): e.g., "google_compute_address"
+3. **Display Name** (smaller text below): The value from the `name` field
 
 ### Attribute Paths
 
@@ -103,6 +133,22 @@ Attribute paths use dot notation to access nested values:
 - `values.project` - Access the `project` field from resource values
 - `values.tags.Name` - Access nested `Name` field within `tags`
 - `name` - Access the resource name itself
+
+### Creating Custom Icons
+
+Icons can be any PNG image file. Recommended size is 48x48 pixels. You can:
+- Use provider-specific icons (AWS, GCP, Azure logos)
+- Create custom icons with tools like Inkscape, GIMP, or Python (PIL/Pillow)
+- Download icon packs from icon libraries
+
+Example icon directory structure:
+```
+icons/
+├── google_compute_address.png
+├── google_compute_instance.png
+├── aws_instance.png
+└── aws_s3_bucket.png
+```
 
 ## Example
 
@@ -112,7 +158,10 @@ Given a Terraform plan with Google Cloud resources:
 terravisualizer --file gcp-plan.json --config terravisualizer.hcl --output gcp-diagram.png
 ```
 
-This will generate a diagram with resources grouped by project and region/zone.
+This will generate a diagram with:
+- Resources grouped hierarchically by project (outer group) and region/zone (inner groups)
+- Each resource showing its icon, type, and display name
+- Visual organization making it easy to understand your infrastructure layout
 
 ## Development
 

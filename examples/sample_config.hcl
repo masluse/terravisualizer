@@ -2,12 +2,12 @@
 
 "google_compute_address" {
     "grouped_by" = [values.project, values.region]
-    "diagramm_image" = "../icons/google_compute_address"
+    "diagramm_image" = "icons/google_compute_address.png"
     "name" = "values.name"
 }
 
 "google_compute_instance" {
     "grouped_by" = [values.project, values.zone]
-    "diagramm_image" = "../icons/google_compute_instance"
+    "diagramm_image" = "icons/google_compute_instance.png"
     "name" = "values.name"
 }
