@@ -61,13 +61,18 @@ jobs:
             lines = code.split('\n')
             filtered_lines = []
             for line in lines:
-                # Skip lines that import from terravisualizer
-                if line.strip().startswith('from terravisualizer'):
+                # Skip lines that import from terravisualizer (both styles)
+                if (line.strip().startswith('from terravisualizer') or 
+                    line.strip().startswith('import terravisualizer')):
                     continue
                 filtered_lines.append(line)
             return '\n'.join(filtered_lines)
         
+        # Apply import removal to all modules for consistency
+        init_py = remove_internal_imports(init_py)
         cli_py = remove_internal_imports(cli_py)
+        config_parser_py = remove_internal_imports(config_parser_py)
+        plan_parser_py = remove_internal_imports(plan_parser_py)
         visualizer_py = remove_internal_imports(visualizer_py)
         
         # Create the standalone script
@@ -127,8 +132,7 @@ except ImportError:
             sys.executable, "-m", "pip", "install", 
             "graphviz>=0.20.0", "--quiet", "--user"
         ])
-        # Force reimport after installation
-        import importlib
+        # Python will automatically find the newly installed package on next import
         import graphviz
     except Exception as e:
         print(f"ERROR: Failed to install graphviz Python package: {e}", file=sys.stderr)
