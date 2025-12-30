@@ -63,9 +63,9 @@
 }
 
 "google_project_iam_member" {
-    "grouped_by" = [values.project]
+    "grouped_by" = [values.project, values.member]
     "diagram_image" = "icons/google_compute_address.png"
-    "name" = "${values.member}-${values.role}"
+    "name" = "${values.role}"
 }
 
 "google_secret_manager_secret" {
