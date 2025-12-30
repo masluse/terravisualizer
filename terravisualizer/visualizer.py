@@ -314,15 +314,9 @@ def generate_diagram(
             if has_only_resources_key:
                 needs_sub_clusters = False
             else:
-                # Check if resources subgroup has only parent resources (that will become their own clusters)
-                # If so, they can be placed directly in the outer cluster without a white wrapper
-                resources_have_only_parents = all(
-                    f"{r.resource_type}.{r.name}" in parent_to_children 
-                    for r in resources_subgroup
-                ) if resources_subgroup else True
-                
                 # We need sub-clusters only if there are other meaningful sub-groups
-                needs_sub_clusters = len(other_subgroups) > 0 and not (resources_have_only_parents and len(other_subgroups) == 0)
+                # (other_subgroups contains groups like region/zone that need their own sub-cluster)
+                needs_sub_clusters = len(other_subgroups) > 0
             
             if not needs_sub_clusters and len(sub_groups) == 1:
                 # Place resources directly in the outer cluster
