@@ -552,6 +552,7 @@ def generate_diagram(
                             
                             sub_node_ids: List[str] = []
                             sub_node_types: Dict[str, str] = {}  # Track node types
+                            parent_cluster_nodes: List[str] = []  # Track nodes from parent clusters
                             
                             for resource in resources_in_group:
                                 parent_key = f"{resource.resource_type}.{resource.name}"
@@ -583,6 +584,8 @@ def generate_diagram(
                                         
                                         if child_node_ids:
                                             _layout_nodes_by_type(parent_cluster, child_node_ids, child_node_types)
+                                            # Track first child node for layout
+                                            parent_cluster_nodes.append(child_node_ids[0])
                                 else:
                                     # Regular node without children
                                     node_id = f'node_{node_counter}'
@@ -604,6 +607,9 @@ def generate_diagram(
                                 _layout_nodes_by_type(sub_cluster, sub_node_ids, sub_node_types)
                                 # Track first node as anchor for this sub-cluster
                                 sub_cluster_anchor_nodes.append(sub_node_ids[0])
+                            elif parent_cluster_nodes:
+                                # If no direct nodes but has parent clusters, use first parent cluster node
+                                sub_cluster_anchor_nodes.append(parent_cluster_nodes[0])
                     
                     # Apply grid layout to sub-clusters using anchor nodes (groups side by side)
                     if len(sub_cluster_anchor_nodes) > 1:
