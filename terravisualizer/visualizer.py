@@ -159,7 +159,8 @@ def group_resources_hierarchically(
             if not grouped_by:
                 sub_key = (resource.resource_type,)
             elif len(grouped_by) > 1:
-                # Use grouping values after the first one
+                # Use remaining grouping values for sub-grouping
+                # (first value was already used for outer group)
                 sub_key_parts = []
                 for field in grouped_by[1:]:
                     value = resource.get_value(field)
@@ -323,12 +324,8 @@ def generate_diagram(
                             resource_config = get_resource_config(config, resource.resource_type)
                             display_name = get_display_name(resource, resource_config)
                             
-                            # Label with parent name
-                            parent_cluster.attr(label=display_name, fontsize='16', 
-                                              fontname='Inter-SemiBold,SF Pro Display-SemiBold,Helvetica Neue-SemiBold,Arial,sans-serif')
-                            parent_cluster.attr(style='filled,rounded', color='#56ab2f:#a8e063', 
-                                              fillcolor='#f0fff4:#e6fffa', penwidth='2.5')
-                            parent_cluster.attr(margin='20')
+                            # Apply consistent parent cluster styling
+                            _apply_parent_cluster_style(parent_cluster, display_name)
                             
                             # Render children inside this cluster
                             child_node_ids: List[str] = []
@@ -398,13 +395,8 @@ def generate_diagram(
                                     resource_config = get_resource_config(config, resource.resource_type)
                                     display_name = get_display_name(resource, resource_config)
                                     
-                                    # Label with parent name
-                                    parent_cluster.attr(label=display_name, fontsize='16', 
-                                                      fontname='Inter-SemiBold,SF Pro Display-SemiBold,Helvetica Neue-SemiBold,Arial,sans-serif')
-                                    # Green theme for parent-child groups
-                                    parent_cluster.attr(style='filled,rounded', color='#56ab2f', 
-                                                      fillcolor='#e8f5e9', penwidth='2.5')
-                                    parent_cluster.attr(margin='20')
+                                    # Apply consistent parent cluster styling
+                                    _apply_parent_cluster_style(parent_cluster, display_name)
                                     
                                     # Render children inside this cluster
                                     child_node_ids: List[str] = []
@@ -448,6 +440,22 @@ def generate_diagram(
     dot.render(output_base, format=output_format, cleanup=True)
     
     return f'{output_base}.{output_format}'
+
+
+def _apply_parent_cluster_style(cluster, label: str) -> None:
+    """
+    Apply consistent styling to parent resource clusters (for parent-child relationships).
+    
+    Args:
+        cluster: The Graphviz cluster/subgraph to style
+        label: The label text for the cluster
+    """
+    cluster.attr(label=label, fontsize='16', 
+                fontname='Inter-SemiBold,SF Pro Display-SemiBold,Helvetica Neue-SemiBold,Arial,sans-serif')
+    # Green theme for parent-child groups
+    cluster.attr(style='filled,rounded', color='#56ab2f', 
+                fillcolor='#e8f5e9', penwidth='2.5')
+    cluster.attr(margin='20')
 
 
 def _create_node_label(resource_type: str, display_name: str, icon_path: str = '') -> str:
