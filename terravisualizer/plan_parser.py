@@ -14,13 +14,17 @@ class Resource:
         
         Args:
             resource_type: The type of resource (e.g., "google_compute_address")
-            name: The resource name
+            name: The resource name (may include index, e.g., "default[0]")
             values: The resource values/attributes
-            address: The unique Terraform address (e.g., "google_compute_address.static_ip_1")
+            address: The unique Terraform address (e.g., "google_compute_address.static_ip_1").
+                     If not provided, defaults to "{resource_type}.{name}".
+                     The address from Terraform plan JSON is always well-formed and safe to use.
         """
         self.resource_type = resource_type
         self.name = name
         self.values = values
+        # Use provided address (from Terraform JSON) or construct from type and name
+        # The fallback ensures uniqueness since name includes any indices
         self.address = address if address else f"{resource_type}.{name}"
     
     def get_value(self, path: str) -> Any:
