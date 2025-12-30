@@ -734,6 +734,9 @@ def _render_grouped_children(
             parent_graph.node(child_node_id, label=child_label)
     else:
         # Multiple groups - create sub-clusters for each
+        # Track first node from each sub-cluster for vertical stacking
+        sub_cluster_first_nodes: List[str] = []
+        
         for group_key, children in sorted(grouped_children.items()):
             if group_key == 'default' or group_key == 'unknown':
                 # Render default/unknown directly without a sub-cluster
@@ -793,6 +796,14 @@ def _render_grouped_children(
                     # Layout by type (same type vertical, different types horizontal)
                     if group_node_ids:
                         _layout_nodes_by_type(sub_cluster, group_node_ids, group_node_types)
+                        # Track first node for vertical stacking of sub-clusters
+                        sub_cluster_first_nodes.append(group_node_ids[0])
+        
+        # Stack sub-clusters vertically with invisible edges
+        if len(sub_cluster_first_nodes) > 1:
+            for i in range(len(sub_cluster_first_nodes) - 1):
+                parent_graph.edge(sub_cluster_first_nodes[i], sub_cluster_first_nodes[i + 1], 
+                                style='invis', weight='10')
     
     return node_counter
 
