@@ -35,6 +35,11 @@ def main():
         choices=["png", "svg", "pdf"],
         help="Output format (default: png)",
     )
+    parser.add_argument(
+        "--title",
+        default=None,
+        help="Title for the diagram (default: auto-generated run number based on timestamp)",
+    )
 
     args = parser.parse_args()
 
@@ -82,7 +87,7 @@ def main():
 
         # Generate diagram
         print(f"Generating diagram...")
-        output_path = generate_diagram(resources, config, args.output, args.format)
+        output_path = generate_diagram(resources, config, args.output, args.format, args.title)
 
         print(f"Diagram generated successfully: {output_path}")
 
