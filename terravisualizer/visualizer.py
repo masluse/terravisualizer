@@ -16,6 +16,10 @@ GRAY_BASE_VALUE = 245  # Starting point (very light gray, #f5f5f5)
 GRAY_REDUCTION_PER_LEVEL = 10  # How much darker per nesting level
 GRAY_MIN_VALUE = 200  # Minimum gray value to prevent too dark colors (#c8c8c8)
 
+# Constants for node box sizing
+ICON_CELL_WIDTH = 64  # Width of icon cell in pixels
+MIN_TEXT_CELL_WIDTH = 200  # Minimum width of text cell for uniform box sizes
+
 
 def extract_grouping_hierarchy(
     resources: List[Resource],
@@ -738,6 +742,7 @@ def _create_node_label(resource_type: str, display_name: str, icon_path: str = '
     """
     Create an HTML-like label for a node with optional icon, resource type, and name.
     Modern cloud diagram aesthetics with shadows and depth.
+    All nodes have a fixed minimum width for uniform alignment.
     
     NOTE: display_name is shown as the main (big, bold) name at the top,
     resource_type is shown as the smaller subtitle below.
@@ -761,7 +766,7 @@ def _create_node_label(resource_type: str, display_name: str, icon_path: str = '
         if icon_abs_path.exists():
             # Use WIDTH and HEIGHT without FIXEDSIZE to allow content to expand if needed
             icon_cell = (
-                f'<TD WIDTH="64" HEIGHT="64" BGCOLOR="#f5f5f5">'
+                f'<TD WIDTH="{ICON_CELL_WIDTH}" HEIGHT="{ICON_CELL_WIDTH}" BGCOLOR="#f5f5f5">'
                 f'<IMG SRC="{icon_abs_path}" SCALE="TRUE"/>'
                 f'</TD>'
             )
@@ -773,11 +778,12 @@ def _create_node_label(resource_type: str, display_name: str, icon_path: str = '
     if icon_cell:
         # Node with icon - modern card-like appearance
         # display_name (big, bold) on top, resource_type (small) below
+        # Fixed WIDTH on text cell ensures uniform box sizes for alignment
         return f'''<
 <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="12" BGCOLOR="white" STYLE="rounded">
   <TR>
     {icon_cell}
-    <TD ALIGN="LEFT" BALIGN="LEFT" CELLPADDING="8">
+    <TD WIDTH="{MIN_TEXT_CELL_WIDTH}" ALIGN="LEFT" BALIGN="LEFT" CELLPADDING="8">
       <FONT POINT-SIZE="16" COLOR="#1f2937"><B>{display_name_escaped}</B></FONT><BR/>
       <FONT POINT-SIZE="11" COLOR="#6b7280">{resource_type_escaped}</FONT>
     </TD>
@@ -786,10 +792,11 @@ def _create_node_label(resource_type: str, display_name: str, icon_path: str = '
     
     # No icon version - clean, modern card
     # display_name (big, bold) on top, resource_type (small) below
+    # Fixed WIDTH ensures uniform box sizes for alignment
     return f'''<
 <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="16" BGCOLOR="white" STYLE="rounded">
   <TR>
-    <TD ALIGN="CENTER" BALIGN="CENTER">
+    <TD WIDTH="{MIN_TEXT_CELL_WIDTH + ICON_CELL_WIDTH}" ALIGN="CENTER" BALIGN="CENTER">
       <FONT POINT-SIZE="16" COLOR="#1f2937"><B>{display_name_escaped}</B></FONT><BR/>
       <FONT POINT-SIZE="11" COLOR="#6b7280">{resource_type_escaped}</FONT>
     </TD>
