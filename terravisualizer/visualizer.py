@@ -21,8 +21,8 @@ ICON_CELL_WIDTH = 64  # Width of icon cell in pixels
 MIN_TEXT_CELL_WIDTH = 200  # Minimum width of text cell for uniform box sizes
 
 # Constants for text width estimation
-CHAR_WIDTH_LARGE_FONT = 8  # Estimated width per character for 16pt bold font
-CHAR_WIDTH_SMALL_FONT = 6  # Estimated width per character for 11pt font
+CHAR_WIDTH_LARGE_FONT = 10  # Estimated width per character for 16pt bold font
+CHAR_WIDTH_SMALL_FONT = 7   # Estimated width per character for 11pt font
 
 
 def extract_grouping_hierarchy(
@@ -109,8 +109,32 @@ def group_resources_hierarchically(
         if resource_config and 'id' in resource_config:
             id_field = resource_config['id']
             id_value = resource.get_value(id_field)
+            
+            # If id_value is None or empty, try to construct a fallback ID
+            if id_value is None or id_value == '':
+                # For google_service_account, try to construct from account_id and project
+                if resource.resource_type == 'google_service_account':
+                    account_id = resource.get_value('values.account_id')
+                    project = resource.get_value('values.project')
+                    if account_id and project:
+                        # Construct the service account email format
+                        id_value = f"{account_id}@{project}.iam.gserviceaccount.com"
+                
+                # If still no ID, use a fallback based on resource name
+                if not id_value:
+                    id_value = f"{resource.resource_type}/{resource.name}"
+            
             if id_value:
-                parent_resources[(resource.resource_type, str(id_value))] = resource
+                id_str = str(id_value)
+                # Check if this ID already exists for this resource type
+                key = (resource.resource_type, id_str)
+                if key in parent_resources:
+                    # ID collision! Use a unique separator that's unlikely in real IDs
+                    # Format: "original_id|||resource_name"
+                    id_str = f"{id_str}|||{resource.name}"
+                    key = (resource.resource_type, id_str)
+                
+                parent_resources[key] = resource
                 parent_key = f"{resource.resource_type}.{resource.name}"
                 parent_map[parent_key] = resource
     
@@ -127,20 +151,46 @@ def group_resources_hierarchically(
             parent_id = resource.get_value(group_id_field)
             
             if parent_id:
-                # Find parent resource - normalize parent_id for comparison
-                parent_id_lower = str(parent_id).lower()
+                # Find parent resource - do case-sensitive exact matching
+                parent_id_str = str(parent_id)
+                matched_parent = None
+                
                 for (parent_type, parent_id_val), potential_parent in parent_resources.items():
                     # Skip if the potential parent is of the same type as the child
                     # (resources shouldn't be nested inside resources of the same type)
                     if parent_type == resource.resource_type:
                         continue
-                    if parent_id_lower == parent_id_val.lower():
-                        resource_to_parent[resource] = potential_parent
-                        parent_key = f"{potential_parent.resource_type}.{potential_parent.name}"
-                        if parent_key not in parent_to_children:
-                            parent_to_children[parent_key] = []
-                        parent_to_children[parent_key].append(resource)
+                    
+                    # Remove collision suffix if present (format: "id|||name")
+                    parent_id_clean = parent_id_val.split('|||')[0] if '|||' in parent_id_val else parent_id_val
+                    
+                    # Try exact match first (case-sensitive)
+                    if parent_id_str == parent_id_clean:
+                        matched_parent = potential_parent
                         break
+                    
+                    # For google_service_account, try matching with constructed email
+                    if parent_type == 'google_service_account' and not matched_parent:
+                        # Check if child's service_account_id matches constructed format
+                        if '@' in parent_id_str and '@' in parent_id_clean:
+                            # Both have email format, try matching email part
+                            child_email = parent_id_str.split('/')[-1] if '/' in parent_id_str else parent_id_str
+                            parent_email = parent_id_clean.split('/')[-1] if '/' in parent_id_clean else parent_id_clean
+                            if child_email.lower() == parent_email.lower():
+                                matched_parent = potential_parent
+                                break
+                    
+                    # Fallback to case-insensitive match
+                    if parent_id_str.lower() == parent_id_clean.lower():
+                        matched_parent = potential_parent
+                        break
+                
+                if matched_parent:
+                    resource_to_parent[resource] = matched_parent
+                    parent_key = f"{matched_parent.resource_type}.{matched_parent.name}"
+                    if parent_key not in parent_to_children:
+                        parent_to_children[parent_key] = []
+                    parent_to_children[parent_key].append(resource)
     
     # Third pass: build groups, excluding children (they'll be rendered inside parents)
     outer_groups = {}  # Maps outer_group_key -> {sub_key -> [resources]}
@@ -336,7 +386,7 @@ def generate_diagram(
     dot.attr(concentrate='false')
     dot.attr(newrank='true')
     dot.attr(nodesep='0.4')   # Horizontal spacing between nodes
-    dot.attr(ranksep='0.3')   # Vertical spacing between ranks (reduced for tighter stacking)
+    dot.attr(ranksep='0.15')  # Vertical spacing between ranks (smaller for tighter stacking)
     dot.attr(pad='0.3')       # Reduced padding around the graph (space to image border)
     dot.attr(margin='0.2')    # Reduced margin (space between graph edge and content)
     dot.attr(dpi='300')       # Much higher DPI for crisp, professional output
@@ -402,7 +452,7 @@ def generate_diagram(
                 # Gray styling with slight transparency (level 1: ~10% gray)
                 gray_level_outer = _get_gray_color(depth=1)
                 outer_cluster.attr(style='filled,rounded', color='#a0a0a0', fillcolor=gray_level_outer, penwidth='2.0')
-                outer_cluster.attr(margin='40')  # Margin for better spacing
+                outer_cluster.attr(margin='25')  # Reduced margin for tighter spacing
                 
                 # Check if we need sub-clusters or can place resources directly
                 has_only_resources_key = len(sub_groups) == 1 and ('resources',) in sub_groups
@@ -550,11 +600,11 @@ def generate_diagram(
                                 # Use DejaVu Sans Bold which is definitely available on Linux
                                 sub_cluster.attr(label=sub_label, fontsize='16', fontname='DejaVu Sans Bold', labeljust='l')
                                 sub_cluster.attr(style='filled,rounded', color='#909090', fillcolor=gray_level_sub, penwidth='1.5')
-                                sub_cluster.attr(margin='22')
+                                sub_cluster.attr(margin='18')  # Reduced margin
                             else:
                                 sub_cluster.attr(label='', fontsize='14', labeljust='l')
                                 sub_cluster.attr(style='filled,rounded', color='#b0b0b0', fillcolor=gray_level_sub, penwidth='1.0')
-                                sub_cluster.attr(margin='16')
+                                sub_cluster.attr(margin='14')  # Reduced margin
                             
                             sub_node_ids: List[str] = []
                             sub_node_types: Dict[str, str] = {}  # Track node types
@@ -926,14 +976,15 @@ def _shorten_path_name(name: str) -> str:
     """
     Shorten a path-like name by keeping only the part after the last '/'.
     
-    If the original string contains '@', it is left completely unchanged to preserve
-    email addresses and service account identifiers.
+    If the original string contains '@' or starts with 'serviceAccount:', it is left 
+    completely unchanged to preserve email addresses and service account identifiers.
     
     Otherwise, if the string contains brackets [...], extract the content from within
     the rightmost bracket pair first, then apply '/' shortening logic.
     
     Examples:
         "serviceAccount:prj-k8s@example.com[kubexporter/kubexporter-job]" -> unchanged (has @)
+        "serviceAccount:any-identifier[kubexporter/kubexporter-job]" -> unchanged (is serviceAccount)
         "path/to/resource" -> "resource"
         "user@example.com" -> "user@example.com" (no shortening due to @)
         "test[foo]bar[baz]" -> "baz" (no @, uses rightmost bracket then shortens)
@@ -944,9 +995,9 @@ def _shorten_path_name(name: str) -> str:
     Returns:
         The shortened name
     """
-    # If the original string contains '@', don't process it at all
+    # If the original string contains '@' or starts with 'serviceAccount:', don't process it at all
     # This preserves email addresses and service account identifiers
-    if '@' in name:
+    if '@' in name or name.startswith('serviceAccount:'):
         return name
     
     # Extract content from rightmost brackets if present
