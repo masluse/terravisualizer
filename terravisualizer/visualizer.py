@@ -251,16 +251,16 @@ def generate_diagram(
     # Create directed graph with modern layout settings
     dot = Digraph(comment='Terraform Resources', engine='dot')
     
-    # Layout - Top to Bottom for better vertical flow (more modern cloud diagram style)
-    dot.attr(rankdir='TB')  # Top to Bottom for cleaner vertical flow
-    dot.attr(splines='curved')  # Curved splines for modern, smooth appearance
+    # Layout - Top to Bottom with improved spacing
+    dot.attr(rankdir='TB')  # Top to Bottom for better visual hierarchy
+    dot.attr(splines='ortho')  # Orthogonal splines for cleaner look
     dot.attr(compound='true')
     dot.attr(concentrate='false')
     dot.attr(newrank='true')
-    dot.attr(nodesep='1.0')   # More generous spacing
-    dot.attr(ranksep='1.8')   # Increased vertical spacing
-    dot.attr(pad='0.8')       # More padding around the graph
-    dot.attr(margin='0.5')
+    dot.attr(nodesep='0.6')   # Horizontal spacing between nodes
+    dot.attr(ranksep='0.8')   # Vertical spacing between ranks
+    dot.attr(pad='1.0')       # Padding around the graph
+    dot.attr(margin='0.8')
     dot.attr(dpi='300')       # Much higher DPI for crisp, professional output
     
     # Modern gradient-like background
@@ -292,19 +292,37 @@ def generate_diagram(
         outer_cluster_name = f'cluster_outer_{abs(hash(outer_key))}'
         
         with dot.subgraph(name=outer_cluster_name) as outer_cluster:
-            # Set outer cluster label with modern styling
+            # Set outer cluster label with modern styling (left-aligned)
             outer_label = _format_outer_group_label(outer_key)
-            outer_cluster.attr(label=outer_label, fontsize='22', fontname='Inter-Bold,SF Pro Display-Bold,Helvetica Neue-Bold,Arial-Bold,sans-serif-bold')
+            outer_cluster.attr(label=outer_label, fontsize='22', fontname='Inter-Bold,SF Pro Display-Bold,Helvetica Neue-Bold,Arial-Bold,sans-serif-bold', labeljust='l')
             # Modern styling with solid colors for maximum compatibility
             # Using a solid purple-blue color instead of gradients
             outer_cluster.attr(style='filled,rounded', color='#667eea', fillcolor='#f0f4ff', penwidth='3.0')
-            outer_cluster.attr(margin='35')
+            outer_cluster.attr(margin='40')  # Increased margin for better spacing
             
             # Check if we need sub-clusters or can place resources directly
             # If there's only one sub-group and it's named 'resources', skip sub-clustering
+            # Also skip if the only non-resources sub-group is empty after removing parent clusters
             has_multiple_sub_groups = len(sub_groups) > 1
-            has_non_resource_groups = not any('resources' == str(k) for k in sub_groups.keys())
-            needs_sub_clusters = has_multiple_sub_groups or has_non_resource_groups
+            has_only_resources_key = len(sub_groups) == 1 and ('resources',) in sub_groups
+            
+            # Check if 'resources' sub-group exists and should be merged into outer cluster
+            resources_subgroup = sub_groups.get(('resources',), [])
+            other_subgroups = {k: v for k, v in sub_groups.items() if k != ('resources',)}
+            
+            # If we only have a 'resources' group, place directly in outer cluster
+            if has_only_resources_key:
+                needs_sub_clusters = False
+            else:
+                # Check if resources subgroup has only parent resources (that will become their own clusters)
+                # If so, they can be placed directly in the outer cluster without a white wrapper
+                resources_have_only_parents = all(
+                    f"{r.resource_type}.{r.name}" in parent_to_children 
+                    for r in resources_subgroup
+                ) if resources_subgroup else True
+                
+                # We need sub-clusters only if there are other meaningful sub-groups
+                needs_sub_clusters = len(other_subgroups) > 0 and not (resources_have_only_parents and len(other_subgroups) == 0)
             
             if not needs_sub_clusters and len(sub_groups) == 1:
                 # Place resources directly in the outer cluster
@@ -363,22 +381,74 @@ def generate_diagram(
                     _layout_nodes_in_grid(outer_cluster, sub_node_ids, max_cols=3)
             else:
                 # Create sub-clusters within the outer cluster
-                for sub_key, resources_in_group in sorted(sub_groups.items()):
+                # But first, handle 'resources' group specially - place parent resources directly in outer cluster
+                resources_subgroup = sub_groups.get(('resources',), [])
+                other_subgroups = {k: v for k, v in sub_groups.items() if k != ('resources',)}
+                
+                # Process 'resources' subgroup - place parent resources directly in outer cluster
+                direct_node_ids: List[str] = []
+                for resource in resources_subgroup:
+                    parent_key = f"{resource.resource_type}.{resource.name}"
+                    
+                    if parent_key in parent_to_children:
+                        # Create parent cluster directly in outer cluster (no white wrapper)
+                        parent_cluster_name = f'cluster_parent_{abs(hash(parent_key))}'
+                        
+                        with outer_cluster.subgraph(name=parent_cluster_name) as parent_cluster:
+                            resource_config = get_resource_config(config, resource.resource_type)
+                            display_name = get_display_name(resource, resource_config)
+                            _apply_parent_cluster_style(parent_cluster, display_name)
+                            
+                            child_node_ids: List[str] = []
+                            for child in parent_to_children[parent_key]:
+                                child_node_id = f'node_{node_counter}'
+                                node_counter += 1
+                                node_ids[f'{child.resource_type}.{child.name}'] = child_node_id
+                                child_node_ids.append(child_node_id)
+                                
+                                child_config = get_resource_config(config, child.resource_type)
+                                child_display_name = get_display_name(child, child_config)
+                                child_icon_path = child_config.get('diagram_image', '')
+                                
+                                child_label = _create_node_label(child.resource_type, child_display_name, child_icon_path)
+                                parent_cluster.node(child_node_id, label=child_label)
+                            
+                            _layout_nodes_in_grid(parent_cluster, child_node_ids, max_cols=2)
+                    else:
+                        # Regular node without children - place directly in outer cluster
+                        node_id = f'node_{node_counter}'
+                        node_counter += 1
+                        node_ids[f'{resource.resource_type}.{resource.name}'] = node_id
+                        direct_node_ids.append(node_id)
+                        
+                        resource_config = get_resource_config(config, resource.resource_type)
+                        display_name = get_display_name(resource, resource_config)
+                        icon_path = resource_config.get('diagram_image', '')
+                        
+                        label = _create_node_label(resource.resource_type, display_name, icon_path)
+                        outer_cluster.node(node_id, label=label)
+                
+                # Layout direct nodes if any
+                if direct_node_ids:
+                    _layout_nodes_in_grid(outer_cluster, direct_node_ids, max_cols=3)
+                
+                # Now process other sub-groups
+                for sub_key, resources_in_group in sorted(other_subgroups.items()):
                     sub_cluster_name = f'cluster_sub_{abs(hash((outer_key, sub_key)))}'
                     
                     with outer_cluster.subgraph(name=sub_cluster_name) as sub_cluster:
                         sub_label = _format_sub_group_label(sub_key)
                         
                         if sub_label:
-                            sub_cluster.attr(label=sub_label, fontsize='15', fontname='Inter,SF Pro Display,Helvetica Neue,Arial,sans-serif')
+                            sub_cluster.attr(label=sub_label, fontsize='15', fontname='Inter,SF Pro Display,Helvetica Neue,Arial,sans-serif', labeljust='l')
                             # Subtle styling for regular sub-groups
                             sub_cluster.attr(style='filled,rounded', color='#bdc3c7', fillcolor='#f9fafb', penwidth='2.0')
-                            sub_cluster.attr(margin='18')
+                            sub_cluster.attr(margin='22')  # Increased margin
                         else:
                             # No label, minimal styling with subtle border
-                            sub_cluster.attr(label='', fontsize='14')
+                            sub_cluster.attr(label='', fontsize='14', labeljust='l')
                             sub_cluster.attr(style='filled,rounded', color='#e8eaed', fillcolor='#ffffff', penwidth='1.5')
-                            sub_cluster.attr(margin='12')
+                            sub_cluster.attr(margin='16')  # Increased margin
                         
                         sub_node_ids: List[str] = []
                         
@@ -450,12 +520,15 @@ def _apply_parent_cluster_style(cluster, label: str) -> None:
         cluster: The Graphviz cluster/subgraph to style
         label: The label text for the cluster
     """
-    cluster.attr(label=label, fontsize='16', 
-                fontname='Inter-SemiBold,SF Pro Display-SemiBold,Helvetica Neue-SemiBold,Arial,sans-serif')
+    # Shorten label if it contains "/"
+    shortened_label = _shorten_path_name(label)
+    cluster.attr(label=shortened_label, fontsize='16', 
+                fontname='Inter-SemiBold,SF Pro Display-SemiBold,Helvetica Neue-SemiBold,Arial,sans-serif',
+                labeljust='l')
     # Green theme for parent-child groups
     cluster.attr(style='filled,rounded', color='#56ab2f', 
                 fillcolor='#e8f5e9', penwidth='2.5')
-    cluster.attr(margin='20')
+    cluster.attr(margin='24')  # Increased margin for better spacing
 
 
 def _create_node_label(resource_type: str, display_name: str, icon_path: str = '') -> str:
@@ -513,6 +586,21 @@ def _create_node_label(resource_type: str, display_name: str, icon_path: str = '
 </TABLE>>'''
 
 
+def _shorten_path_name(name: str) -> str:
+    """
+    Shorten a path-like name by keeping only the part after the last '/'.
+    
+    Args:
+        name: The name to shorten (may contain '/' characters)
+        
+    Returns:
+        The shortened name (only text after the last '/')
+    """
+    if '/' in name:
+        return name.rsplit('/', 1)[-1]
+    return name
+
+
 def _format_outer_group_label(group_key: Tuple[str, ...]) -> str:
     """
     Format an outer group key into a readable label.
@@ -532,8 +620,9 @@ def _format_outer_group_label(group_key: Tuple[str, ...]) -> str:
     if group_key == ('default',):
         return 'Default Group'
     
-    # For outer groups, just show the value
-    return ' | '.join(group_key)
+    # For outer groups, shorten path-like values and join
+    shortened_parts = [_shorten_path_name(part) for part in group_key]
+    return ' | '.join(shortened_parts)
 
 
 def _format_sub_group_label(sub_key: Tuple[str, ...]) -> str:
@@ -557,18 +646,20 @@ def _format_sub_group_label(sub_key: Tuple[str, ...]) -> str:
         part = parts[0]
         # If it's a parent resource identifier, extract just the name
         if ':' in part:
-            return part.split(':', 1)[1]
+            return _shorten_path_name(part.split(':', 1)[1])
         # If it's just 'resources', don't show a label
         if part == 'resources':
             return ''
-        return part
+        return _shorten_path_name(part)
     
     # For multiple parts, show them as joined values (without resource type)
     # Skip if all values are 'unknown'
     if all(v == 'unknown' for v in parts):
         return ''
     
-    return ' | '.join(parts)
+    # Shorten path-like values
+    shortened_parts = [_shorten_path_name(p) for p in parts]
+    return ' | '.join(shortened_parts)
 
 def _layout_nodes_in_grid(g: Digraph, node_ids: List[str], max_cols: int = 3) -> None:
     """
