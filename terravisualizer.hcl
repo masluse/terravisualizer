@@ -78,7 +78,7 @@
     "grouped_by" = [values.project]
     "diagram_image" = "icons/google_compute_address.png"
     "name" = "${values.display_name}"
-    "id" = "${values.id}"
+    "id" = "values.id"
 }
 
 "google_service_account_iam_member" {
