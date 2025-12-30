@@ -926,15 +926,17 @@ def _shorten_path_name(name: str) -> str:
     """
     Shorten a path-like name by keeping only the part after the last '/'.
     
-    If the string contains brackets [...], extract the content from within the rightmost
-    bracket pair first. Then, apply shortening logic only if there's no '@' in the 
-    extracted/remaining part.
+    If the original string contains '@', it is left completely unchanged to preserve
+    email addresses and service account identifiers.
+    
+    Otherwise, if the string contains brackets [...], extract the content from within
+    the rightmost bracket pair first, then apply '/' shortening logic.
     
     Examples:
-        "serviceAccount:prj-k8s@example.com[kubexporter/kubexporter-job]" -> "kubexporter-job"
+        "serviceAccount:prj-k8s@example.com[kubexporter/kubexporter-job]" -> unchanged (has @)
         "path/to/resource" -> "resource"
-        "user@example.com" -> "user@example.com" (no shortening)
-        "test[foo]bar[baz]" -> "baz" (uses rightmost bracket)
+        "user@example.com" -> "user@example.com" (no shortening due to @)
+        "test[foo]bar[baz]" -> "baz" (no @, uses rightmost bracket then shortens)
     
     Args:
         name: The name to shorten (may contain '/' characters and brackets)
@@ -942,6 +944,13 @@ def _shorten_path_name(name: str) -> str:
     Returns:
         The shortened name
     """
+    original_name = name
+    
+    # If the original string contains '@', don't process it at all
+    # This preserves email addresses and service account identifiers
+    if '@' in original_name:
+        return original_name
+    
     # Extract content from rightmost brackets if present
     if '[' in name and ']' in name:
         # Find the last opening bracket
@@ -952,10 +961,7 @@ def _shorten_path_name(name: str) -> str:
             # Extract content from rightmost brackets
             name = name[start + 1:end]
     
-    # Now apply the shortening logic
-    # Don't shorten if the string contains '@' (email addresses, service accounts, etc.)
-    if '@' in name:
-        return name
+    # Apply the shortening logic (only if no '@' in original)
     if '/' in name:
         return name.rsplit('/', 1)[-1]
     return name
