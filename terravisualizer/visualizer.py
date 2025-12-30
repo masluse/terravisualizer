@@ -689,6 +689,7 @@ def generate_diagram(
                     # Stack sub-clusters vertically (untereinander) instead of side by side
                     if len(sub_cluster_anchor_nodes) > 1:
                         # Sub-groups should be stacked vertically with invisible edges
+                        # Using weight='10' to ensure vertical stacking without being too tight
                         for i in range(len(sub_cluster_anchor_nodes) - 1):
                             outer_cluster.edge(sub_cluster_anchor_nodes[i], sub_cluster_anchor_nodes[i + 1], style='invis', weight='10')
     
