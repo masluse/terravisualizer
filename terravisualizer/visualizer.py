@@ -241,6 +241,51 @@ def get_display_name(resource: Resource, resource_config: Dict[str, Any]) -> str
         return resource.name
 
 
+def calculate_max_widths_per_type(
+    resources: List[Resource],
+    config: Dict[str, Any]
+) -> Dict[str, int]:
+    """
+    Calculate the maximum text width needed for each resource type.
+    This ensures all instances of a resource type have uniform box sizes.
+    
+    Args:
+        resources: List of all resources
+        config: Configuration dictionary
+        
+    Returns:
+        Dictionary mapping resource_type to max width in pixels
+    """
+    type_widths = {}
+    
+    for resource in resources:
+        resource_config = get_resource_config(config, resource.resource_type)
+        display_name = get_display_name(resource, resource_config)
+        
+        # Estimate width: rough approximation based on character count
+        # Assume average character width of ~8px for 16pt bold font
+        display_name_width = len(display_name) * 8
+        resource_type_width = len(resource.resource_type) * 6  # Smaller font
+        
+        # Take the max of the two text elements
+        estimated_width = max(display_name_width, resource_type_width)
+        
+        # Track maximum for this resource type
+        if resource.resource_type not in type_widths:
+            type_widths[resource.resource_type] = estimated_width
+        else:
+            type_widths[resource.resource_type] = max(
+                type_widths[resource.resource_type],
+                estimated_width
+            )
+    
+    # Ensure minimum width and add padding
+    for resource_type in type_widths:
+        type_widths[resource_type] = max(MIN_TEXT_CELL_WIDTH, type_widths[resource_type] + 20)
+    
+    return type_widths
+
+
 def generate_diagram(
     resources: List[Resource],
     config: Dict[str, Any],
@@ -261,6 +306,9 @@ def generate_diagram(
     Returns:
         Path to the generated diagram
     """
+    # Calculate max widths per resource type for uniform box sizes
+    max_widths_per_type = calculate_max_widths_per_type(resources, config)
+    
     # Group resources hierarchically
     grouped, parent_to_children = group_resources_hierarchically(resources, config)
     
@@ -282,7 +330,7 @@ def generate_diagram(
     dot.attr(concentrate='false')
     dot.attr(newrank='true')
     dot.attr(nodesep='0.4')   # Horizontal spacing between nodes
-    dot.attr(ranksep='0.5')   # Vertical spacing between ranks
+    dot.attr(ranksep='0.3')   # Vertical spacing between ranks (reduced for tighter stacking)
     dot.attr(pad='0.3')       # Reduced padding around the graph (space to image border)
     dot.attr(margin='0.2')    # Reduced margin (space between graph edge and content)
     dot.attr(dpi='300')       # Much higher DPI for crisp, professional output
@@ -394,7 +442,8 @@ def generate_diagram(
                                 child_node_types: Dict[str, str] = {}
                                 node_counter = _render_grouped_children(
                                     parent_cluster, grouped_children, config, 
-                                    node_ids, child_node_ids, node_counter, depth=3,
+                                    node_ids, child_node_ids, node_counter, 
+                                    max_widths_per_type, depth=3,
                                     node_types=child_node_types
                                 )
                                 
@@ -413,7 +462,8 @@ def generate_diagram(
                             display_name = get_display_name(resource, resource_config)
                             icon_path = resource_config.get('diagram_image', '')
                             
-                            label = _create_node_label(resource.resource_type, display_name, icon_path)
+                            text_width = max_widths_per_type.get(resource.resource_type)
+                            label = _create_node_label(resource.resource_type, display_name, icon_path, text_width)
                             outer_cluster.node(node_id, label=label)
                     
                     # Layout nodes by type (same type vertical, different types horizontal)
@@ -450,7 +500,8 @@ def generate_diagram(
                                 child_node_types: Dict[str, str] = {}
                                 node_counter = _render_grouped_children(
                                     parent_cluster, grouped_children, config,
-                                    node_ids, child_node_ids, node_counter, depth=3,
+                                    node_ids, child_node_ids, node_counter,
+                                    max_widths_per_type, depth=3,
                                     node_types=child_node_types
                                 )
                                 
@@ -470,7 +521,8 @@ def generate_diagram(
                             display_name = get_display_name(resource, resource_config)
                             icon_path = resource_config.get('diagram_image', '')
                             
-                            label = _create_node_label(resource.resource_type, display_name, icon_path)
+                            text_width = max_widths_per_type.get(resource.resource_type)
+                            label = _create_node_label(resource.resource_type, display_name, icon_path, text_width)
                             outer_cluster.node(node_id, label=label)
                     
                     # Layout direct nodes by type
@@ -524,7 +576,8 @@ def generate_diagram(
                                         child_node_types: Dict[str, str] = {}
                                         node_counter = _render_grouped_children(
                                             parent_cluster, grouped_children, config,
-                                            node_ids, child_node_ids, node_counter, depth=4,
+                                            node_ids, child_node_ids, node_counter,
+                                            max_widths_per_type, depth=4,
                                             node_types=child_node_types
                                         )
                                         
@@ -542,7 +595,8 @@ def generate_diagram(
                                     display_name = get_display_name(resource, resource_config)
                                     icon_path = resource_config.get('diagram_image', '')
                                     
-                                    label = _create_node_label(resource.resource_type, display_name, icon_path)
+                                    text_width = max_widths_per_type.get(resource.resource_type)
+                                    label = _create_node_label(resource.resource_type, display_name, icon_path, text_width)
                                     sub_cluster.node(node_id, label=label)
                             
                             # Layout nodes by type
@@ -633,7 +687,8 @@ def _render_grouped_children(
     node_ids: Dict[str, str],
     all_child_node_ids: List[str],
     node_counter: int,
-    depth: int,
+    max_widths_per_type: Dict[str, int],
+    depth: int = 2,
     node_types: Optional[Dict[str, str]] = None
 ) -> int:
     """
@@ -646,6 +701,7 @@ def _render_grouped_children(
         node_ids: Dictionary to track node IDs
         all_child_node_ids: List to collect all child node IDs for layout
         node_counter: Current node counter
+        max_widths_per_type: Dictionary of resource_type -> max width
         depth: Current nesting depth for gray color
         node_types: Optional dictionary to track node_id -> resource_type mapping
         
@@ -667,7 +723,8 @@ def _render_grouped_children(
             child_display_name = get_display_name(child, child_config)
             child_icon_path = child_config.get('diagram_image', '')
             
-            child_label = _create_node_label(child.resource_type, child_display_name, child_icon_path)
+            text_width = max_widths_per_type.get(child.resource_type)
+            child_label = _create_node_label(child.resource_type, child_display_name, child_icon_path, text_width)
             parent_graph.node(child_node_id, label=child_label)
     else:
         # Multiple groups - create sub-clusters for each
@@ -686,7 +743,8 @@ def _render_grouped_children(
                     child_display_name = get_display_name(child, child_config)
                     child_icon_path = child_config.get('diagram_image', '')
                     
-                    child_label = _create_node_label(child.resource_type, child_display_name, child_icon_path)
+                    text_width = max_widths_per_type.get(child.resource_type)
+                    child_label = _create_node_label(child.resource_type, child_display_name, child_icon_path, text_width)
                     parent_graph.node(child_node_id, label=child_label)
             else:
                 # Create a sub-cluster for this group
@@ -722,7 +780,8 @@ def _render_grouped_children(
                         child_display_name = get_display_name(child, child_config)
                         child_icon_path = child_config.get('diagram_image', '')
                         
-                        child_label = _create_node_label(child.resource_type, child_display_name, child_icon_path)
+                        text_width = max_widths_per_type.get(child.resource_type)
+                        child_label = _create_node_label(child.resource_type, child_display_name, child_icon_path, text_width)
                         sub_cluster.node(child_node_id, label=child_label)
                     
                     # Layout by type (same type vertical, different types horizontal)
@@ -769,7 +828,7 @@ def _escape_html(text: str) -> str:
     return text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
 
-def _create_node_label(resource_type: str, display_name: str, icon_path: str = '') -> str:
+def _create_node_label(resource_type: str, display_name: str, icon_path: str = '', text_width: Optional[int] = None) -> str:
     """
     Create an HTML-like label for a node with optional icon, resource type, and name.
     Modern cloud diagram aesthetics with shadows and depth.
@@ -782,10 +841,14 @@ def _create_node_label(resource_type: str, display_name: str, icon_path: str = '
         resource_type: The resource type (shown as small subtitle)
         display_name: The display name (shown as big bold name)
         icon_path: Path to the icon image (optional)
+        text_width: Optional custom width for text cell (for uniform sizing per type)
         
     Returns:
         HTML-like label string for Graphviz
     """
+    # Use provided width or fallback to default
+    cell_width = text_width if text_width is not None else MIN_TEXT_CELL_WIDTH
+    
     # Escape special characters in text for HTML
     # Don't truncate resource type and display name - show full names
     resource_type_escaped = _escape_html(resource_type)
@@ -814,7 +877,7 @@ def _create_node_label(resource_type: str, display_name: str, icon_path: str = '
 <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="12" BGCOLOR="white" STYLE="rounded">
   <TR>
     {icon_cell}
-    <TD WIDTH="{MIN_TEXT_CELL_WIDTH}" ALIGN="LEFT" BALIGN="LEFT" CELLPADDING="8">
+    <TD WIDTH="{cell_width}" ALIGN="LEFT" BALIGN="LEFT" CELLPADDING="8">
       <FONT POINT-SIZE="16" COLOR="#1f2937"><B>{display_name_escaped}</B></FONT><BR/>
       <FONT POINT-SIZE="11" COLOR="#6b7280">{resource_type_escaped}</FONT>
     </TD>
@@ -827,7 +890,7 @@ def _create_node_label(resource_type: str, display_name: str, icon_path: str = '
     return f'''<
 <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="16" BGCOLOR="white" STYLE="rounded">
   <TR>
-    <TD WIDTH="{MIN_TEXT_CELL_WIDTH + ICON_CELL_WIDTH}" ALIGN="CENTER" BALIGN="CENTER">
+    <TD WIDTH="{cell_width + ICON_CELL_WIDTH}" ALIGN="CENTER" BALIGN="CENTER">
       <FONT POINT-SIZE="16" COLOR="#1f2937"><B>{display_name_escaped}</B></FONT><BR/>
       <FONT POINT-SIZE="11" COLOR="#6b7280">{resource_type_escaped}</FONT>
     </TD>
@@ -839,15 +902,29 @@ def _shorten_path_name(name: str) -> str:
     """
     Shorten a path-like name by keeping only the part after the last '/'.
     
-    Does NOT shorten if the string contains '@' (e.g., email addresses like
-    user:alice@example.com should remain intact).
+    If the string contains brackets [...], extract the content from within the brackets first.
+    Then, apply shortening logic only if there's no '@' in the extracted/remaining part.
+    
+    Examples:
+        "serviceAccount:prj-k8s@example.com[kubexporter/kubexporter-job]" -> "kubexporter-job"
+        "path/to/resource" -> "resource"
+        "user@example.com" -> "user@example.com" (no shortening)
     
     Args:
-        name: The name to shorten (may contain '/' characters)
+        name: The name to shorten (may contain '/' characters and brackets)
         
     Returns:
-        The shortened name (only text after the last '/' if no '@' present)
+        The shortened name
     """
+    # Extract content from brackets if present
+    if '[' in name and ']' in name:
+        start = name.find('[')
+        end = name.find(']', start)
+        if end > start:
+            # Extract content from brackets
+            name = name[start + 1:end]
+    
+    # Now apply the shortening logic
     # Don't shorten if the string contains '@' (email addresses, service accounts, etc.)
     if '@' in name:
         return name
