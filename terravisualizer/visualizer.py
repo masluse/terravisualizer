@@ -109,9 +109,31 @@ def group_resources_hierarchically(
         if resource_config and 'id' in resource_config:
             id_field = resource_config['id']
             id_value = resource.get_value(id_field)
-            if id_value is not None and id_value != '':
+            
+            # If id_value is None or empty, try to construct a fallback ID
+            if id_value is None or id_value == '':
+                # For google_service_account, try to construct from account_id and project
+                if resource.resource_type == 'google_service_account':
+                    account_id = resource.get_value('values.account_id')
+                    project = resource.get_value('values.project')
+                    if account_id and project:
+                        # Construct the service account email format
+                        id_value = f"{account_id}@{project}.iam.gserviceaccount.com"
+                
+                # If still no ID, use a fallback based on resource name
+                if not id_value:
+                    id_value = f"{resource.resource_type}/{resource.name}"
+            
+            if id_value:
                 id_str = str(id_value)
-                parent_resources[(resource.resource_type, id_str)] = resource
+                # Check if this ID already exists for this resource type
+                key = (resource.resource_type, id_str)
+                if key in parent_resources:
+                    # ID collision! Use resource name as differentiator
+                    id_str = f"{id_str}#{resource.name}"
+                    key = (resource.resource_type, id_str)
+                
+                parent_resources[key] = resource
                 parent_key = f"{resource.resource_type}.{resource.name}"
                 parent_map[parent_key] = resource
     
@@ -138,13 +160,27 @@ def group_resources_hierarchically(
                     if parent_type == resource.resource_type:
                         continue
                     
+                    # Remove collision suffix if present (format: "id#name")
+                    parent_id_clean = parent_id_val.split('#')[0] if '#' in parent_id_val else parent_id_val
+                    
                     # Try exact match first (case-sensitive)
-                    if parent_id_str == parent_id_val:
+                    if parent_id_str == parent_id_clean:
                         matched_parent = potential_parent
                         break
                     
+                    # For google_service_account, try matching with constructed email
+                    if parent_type == 'google_service_account' and not matched_parent:
+                        # Check if child's service_account_id matches constructed format
+                        if '@' in parent_id_str and '@' in parent_id_clean:
+                            # Both have email format, try matching email part
+                            child_email = parent_id_str.split('/')[-1] if '/' in parent_id_str else parent_id_str
+                            parent_email = parent_id_clean.split('/')[-1] if '/' in parent_id_clean else parent_id_clean
+                            if child_email.lower() == parent_email.lower():
+                                matched_parent = potential_parent
+                                break
+                    
                     # Fallback to case-insensitive match
-                    if parent_id_str.lower() == parent_id_val.lower():
+                    if parent_id_str.lower() == parent_id_clean.lower():
                         matched_parent = potential_parent
                         break
                 

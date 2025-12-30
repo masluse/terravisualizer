@@ -74,6 +74,11 @@ def parse_terraform_plan(plan_path: str) -> List[Resource]:
             resource_type = change.get('type', '')
             name = change.get('name', '')
             
+            # If resource has an index, append it to name to make it unique
+            index = change.get('index')
+            if index is not None:
+                name = f"{name}[{index}]"
+            
             # Get values from after (planned state)
             values = {}
             if 'change' in change and 'after' in change['change']:
@@ -103,6 +108,14 @@ def _extract_from_module(module: Dict[str, Any]) -> List[Resource]:
         for resource_data in module['resources']:
             resource_type = resource_data.get('type', '')
             name = resource_data.get('name', '')
+            
+            # If resource has an index, append it to name to make it unique
+            # This handles cases like module.foo["key"].resource.default["index"]
+            index = resource_data.get('index')
+            if index is not None:
+                # Append index to name for uniqueness
+                name = f"{name}[{index}]"
+            
             values = resource_data.get('values', {})
             
             resources.append(Resource(resource_type, name, values))
