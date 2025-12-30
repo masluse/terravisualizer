@@ -292,14 +292,15 @@ def generate_diagram(
     dot.attr(fontname='Inter,SF Pro Display,Helvetica Neue,Arial,sans-serif')
     dot.attr(fontsize='13')
     
-    # Set the graph label with title on the left and timestamp on the right using HTML table
-    # Using a very wide middle spacer cell to push timestamp to the right edge
+    # Title at top-left, timestamp at top-right
+    # GraphViz only supports one graph label, so we combine them in a table
+    # Using labeljust='l' positions the table at the left, but we make the table wide enough
+    # to span across and right-align the timestamp within it
     header_label = f'''<
-<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="8">
+<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="0" WIDTH="1500">
   <TR>
-    <TD ALIGN="LEFT"><B><FONT POINT-SIZE="24" COLOR="#1f2937">{title}</FONT></B></TD>
-    <TD WIDTH="800">&nbsp;</TD>
-    <TD ALIGN="RIGHT"><FONT POINT-SIZE="14" COLOR="#6b7280">{timestamp}</FONT></TD>
+    <TD ALIGN="LEFT" WIDTH="300"><B><FONT POINT-SIZE="24" COLOR="#1f2937">{title}</FONT></B></TD>
+    <TD ALIGN="RIGHT" WIDTH="1200"><FONT POINT-SIZE="14" COLOR="#6b7280">{timestamp}</FONT></TD>
   </TR>
 </TABLE>>'''
     dot.attr(label=header_label, labelloc='t', labeljust='l')
