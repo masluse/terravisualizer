@@ -122,6 +122,10 @@ def group_resources_hierarchically(
                 # Find parent resource - normalize parent_id for comparison
                 parent_id_lower = str(parent_id).lower()
                 for (parent_type, parent_id_val), potential_parent in parent_resources.items():
+                    # Skip if the potential parent is of the same type as the child
+                    # (resources shouldn't be nested inside resources of the same type)
+                    if parent_type == resource.resource_type:
+                        continue
                     if parent_id_lower == parent_id_val.lower():
                         resource_to_parent[resource] = potential_parent
                         parent_key = f"{potential_parent.resource_type}.{potential_parent.name}"
@@ -279,10 +283,22 @@ def generate_diagram(
     dot.attr(margin='1.2')    # Increased margin
     dot.attr(dpi='300')       # Much higher DPI for crisp, professional output
     
-    # Light background for outer container
+    # Light background for outer container with title header
     dot.attr(bgcolor='#f5f5f5')  # Light gray background
     dot.attr(fontname='Inter,SF Pro Display,Helvetica Neue,Arial,sans-serif')
     dot.attr(fontsize='13')
+    
+    # Set the graph label with title on the left and timestamp on the right using HTML table
+    # Using a large spacer to push timestamp towards the right
+    header_label = f'''<
+<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="8">
+  <TR>
+    <TD ALIGN="LEFT"><B><FONT POINT-SIZE="24" COLOR="#1f2937">{title}</FONT></B></TD>
+    <TD WIDTH="400"></TD>
+    <TD ALIGN="RIGHT"><FONT POINT-SIZE="14" COLOR="#6b7280">{timestamp}</FONT></TD>
+  </TR>
+</TABLE>>'''
+    dot.attr(label=header_label, labelloc='t', labeljust='l')
     
     # Modern node defaults with shadow effect
     dot.attr('node', shape='plaintext', fontname='Inter,SF Pro Display,Helvetica Neue,Arial,sans-serif')
@@ -303,21 +319,13 @@ def generate_diagram(
     
     sorted_groups = sorted(grouped.items(), key=sort_key)
     
-    # Create the main diagram container with title/timestamp header
-    # The container has a dotted pattern background
+    # Create the main diagram container
+    # Note: Graphviz doesn't support true dotted/textured backgrounds natively
+    # Using a subtle light gray fill to provide visual distinction
     with dot.subgraph(name='cluster_diagram_container') as container:
-        # Create HTML label with title (left) and timestamp (right)
-        header_label = f'''<
-<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="0" WIDTH="100%">
-  <TR>
-    <TD ALIGN="LEFT"><FONT POINT-SIZE="24" COLOR="#1f2937"><B>{title}</B></FONT></TD>
-    <TD ALIGN="RIGHT"><FONT POINT-SIZE="14" COLOR="#6b7280">{timestamp}</FONT></TD>
-  </TR>
-</TABLE>>'''
-        container.attr(label=header_label, labeljust='l', labelloc='t')
-        # Dotted pattern background - light gray with transparency effect
-        # Using a subtle gray fill to simulate the dotted pattern effect
-        container.attr(style='filled,rounded', fillcolor='#e8e8e8:#f0f0f0', color='#cccccc', penwidth='2.0')
+        container.attr(label='', labeljust='l', labelloc='t')
+        # Solid border with subtle gray fill for the container background
+        container.attr(style='filled,rounded', fillcolor='#e9e9e9', color='#cccccc', penwidth='2.0')
         container.attr(margin='50')  # Padding inside the container
         
         # Nesting depth for gray transparency calculation
@@ -330,7 +338,8 @@ def generate_diagram(
             with container.subgraph(name=outer_cluster_name) as outer_cluster:
                 # Set outer cluster label with modern styling (left-aligned)
                 outer_label = _format_outer_group_label(outer_key)
-                outer_cluster.attr(label=outer_label, fontsize='22', fontname='Inter-Bold,SF Pro Display-Bold,Helvetica Neue-Bold,Arial-Bold,sans-serif-bold', labeljust='l')
+                # Use DejaVu Sans Bold which is definitely available on Linux
+                outer_cluster.attr(label=outer_label, fontsize='22', fontname='DejaVu Sans Bold', labeljust='l')
                 # Gray styling with slight transparency (level 1: ~10% gray)
                 gray_level_outer = _get_gray_color(depth=1)
                 outer_cluster.attr(style='filled,rounded', color='#a0a0a0', fillcolor=gray_level_outer, penwidth='2.0')
@@ -460,7 +469,8 @@ def generate_diagram(
                             gray_level_sub = _get_gray_color(depth=2)
                             
                             if sub_label:
-                                sub_cluster.attr(label=sub_label, fontsize='15', fontname='Inter,SF Pro Display,Helvetica Neue,Arial,sans-serif', labeljust='l')
+                                # Use DejaVu Sans Bold which is definitely available on Linux
+                                sub_cluster.attr(label=sub_label, fontsize='16', fontname='DejaVu Sans Bold', labeljust='l')
                                 sub_cluster.attr(style='filled,rounded', color='#909090', fillcolor=gray_level_sub, penwidth='1.5')
                                 sub_cluster.attr(margin='22')
                             else:
@@ -640,12 +650,14 @@ def _render_grouped_children(
                 sub_cluster_name = f'cluster_grouped_{abs(hash(group_key))}'
                 
                 with parent_graph.subgraph(name=sub_cluster_name) as sub_cluster:
-                    # Format the group label nicely
-                    group_label = _shorten_path_name(group_key)
+                    # Format the group label nicely with bold styling
+                    group_label_text = _shorten_path_name(group_key)
                     gray_color = _get_gray_color(depth)
                     
-                    sub_cluster.attr(label=group_label, fontsize='13', 
-                                   fontname='Inter,SF Pro Display,Helvetica Neue,Arial,sans-serif',
+                    # Use plain text label - bold styling applied via fontname
+                    # Use DejaVu Sans Bold which is definitely available on Linux
+                    sub_cluster.attr(label=group_label_text, fontsize='14', 
+                                   fontname='DejaVu Sans Bold',
                                    labeljust='l')
                     sub_cluster.attr(style='filled,rounded', color='#a0a0a0', 
                                    fillcolor=gray_color, penwidth='1.0')
@@ -684,8 +696,10 @@ def _apply_parent_cluster_style(cluster, label: str, depth: int = 2) -> None:
     """
     # Shorten label if it contains "/"
     shortened_label = _shorten_path_name(label)
+    # Use plain text label - bold styling applied via fontname
+    # Use DejaVu Sans Bold which is definitely available on Linux
     cluster.attr(label=shortened_label, fontsize='16', 
-                fontname='Inter-SemiBold,SF Pro Display-SemiBold,Helvetica Neue-SemiBold,Arial,sans-serif',
+                fontname='DejaVu Sans Bold',
                 labeljust='l')
     # Gray theme for parent-child groups (based on depth)
     gray_color = _get_gray_color(depth)
@@ -731,20 +745,22 @@ def _create_node_label(resource_type: str, display_name: str, icon_path: str = '
     if icon_path:
         icon_abs_path = Path(icon_path).resolve()
         if icon_abs_path.exists():
+            # Use WIDTH and HEIGHT without FIXEDSIZE to allow content to expand if needed
             icon_cell = (
-                f'<TD WIDTH="64" HEIGHT="64" FIXEDSIZE="TRUE" BGCOLOR="#f5f5f5" STYLE="rounded">'
+                f'<TD WIDTH="64" HEIGHT="64" BGCOLOR="#f5f5f5">'
                 f'<IMG SRC="{icon_abs_path}" SCALE="TRUE"/>'
                 f'</TD>'
             )
         else:
-            # Modern placeholder icon with solid color
-            icon_cell = '<TD WIDTH="56" HEIGHT="56" FIXEDSIZE="TRUE" BGCOLOR="#eeeeee" BORDER="0" STYLE="rounded"><FONT POINT-SIZE="28">📦</FONT></TD>'
+            # If icon doesn't exist, don't show a placeholder - just skip the icon cell
+            # This avoids issues with emoji rendering in Graphviz
+            icon_cell = ''
 
     if icon_cell:
         # Node with icon - modern card-like appearance
         # display_name (big, bold) on top, resource_type (small) below
         return f'''<
-<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="16" BGCOLOR="white" COLOR="#d0d7de" STYLE="rounded">
+<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="12" BGCOLOR="white" STYLE="rounded">
   <TR>
     {icon_cell}
     <TD ALIGN="LEFT" BALIGN="LEFT" CELLPADDING="8">
@@ -757,7 +773,7 @@ def _create_node_label(resource_type: str, display_name: str, icon_path: str = '
     # No icon version - clean, modern card
     # display_name (big, bold) on top, resource_type (small) below
     return f'''<
-<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="18" BGCOLOR="white" COLOR="#d0d7de" STYLE="rounded">
+<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="16" BGCOLOR="white" STYLE="rounded">
   <TR>
     <TD ALIGN="CENTER" BALIGN="CENTER">
       <FONT POINT-SIZE="16" COLOR="#1f2937"><B>{display_name_escaped}</B></FONT><BR/>
@@ -785,6 +801,7 @@ def _shorten_path_name(name: str) -> str:
 def _format_outer_group_label(group_key: Tuple[str, ...]) -> str:
     """
     Format an outer group key into a readable label.
+    Note: Bold styling is applied via fontname attribute, not HTML tags.
     
     Args:
         group_key: Tuple representing the outer group
@@ -794,28 +811,27 @@ def _format_outer_group_label(group_key: Tuple[str, ...]) -> str:
     """
     if not group_key:
         return 'Resources'
-    
-    if group_key == ('ungrouped',):
+    elif group_key == ('ungrouped',):
         return 'Ungrouped Resources'
-    
-    if group_key == ('default',):
+    elif group_key == ('default',):
         return 'Default Group'
-    
-    # For outer groups, shorten path-like values and join
-    shortened_parts = [_shorten_path_name(part) for part in group_key]
-    return ' | '.join(shortened_parts)
+    else:
+        # For outer groups, shorten path-like values and join
+        shortened_parts = [_shorten_path_name(part) for part in group_key]
+        return ' | '.join(shortened_parts)
 
 
 def _format_sub_group_label(sub_key: Tuple[str, ...]) -> str:
     """
     Format a sub-group key into a readable label.
     Does not include resource type prefix - only shows grouping values.
+    Note: Bold styling is applied via fontname attribute, not HTML tags.
     
     Args:
         sub_key: Tuple representing the sub-group
         
     Returns:
-        Formatted label string
+        Formatted label string, or empty string
     """
     if not sub_key:
         return ''
@@ -829,9 +845,10 @@ def _format_sub_group_label(sub_key: Tuple[str, ...]) -> str:
         if ':' in part:
             return _shorten_path_name(part.split(':', 1)[1])
         # If it's just 'resources', don't show a label
-        if part == 'resources':
+        elif part == 'resources':
             return ''
-        return _shorten_path_name(part)
+        else:
+            return _shorten_path_name(part)
     
     # For multiple parts, show them as joined values (without resource type)
     # Skip if all values are 'unknown'
