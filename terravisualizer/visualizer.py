@@ -342,6 +342,29 @@ def calculate_max_widths_per_type(
     
     return type_widths
 
+def _layout_group_anchors(outer_cluster: Digraph, anchor_node_ids: List[str]) -> None:
+    """
+    Layout anchor nodes for sub-clusters:
+    - For small counts: keep them on one row (rank=same)
+    - For larger counts: wrap them into a grid to avoid huge horizontal diagrams
+    """
+    if len(anchor_node_ids) <= 1:
+        return
+
+    # Small: one row looks nice
+    if len(anchor_node_ids) <= 3:
+        with outer_cluster.subgraph(name=f'rank_groups_{abs(hash(tuple(anchor_node_ids)))}') as rg:
+            rg.attr(rank='same')
+            for nid in anchor_node_ids:
+                rg.node(nid)
+
+        for i in range(len(anchor_node_ids) - 1):
+            outer_cluster.edge(anchor_node_ids[i], anchor_node_ids[i + 1], style='invis', weight='15')
+        return
+
+    # Bigger: wrap into grid
+    _layout_nodes_in_grid(outer_cluster, anchor_node_ids, max_cols=3)
+
 
 def generate_diagram(
     resources: List[Resource],
@@ -669,15 +692,7 @@ def generate_diagram(
                                 sub_cluster_anchor_nodes.append(parent_cluster_nodes[0])
                     
                     # Apply grid layout to sub-clusters using anchor nodes (groups side by side)
-                    if len(sub_cluster_anchor_nodes) > 1:
-                        # Groups on same level should be side by side (horizontal)
-                        with outer_cluster.subgraph(name=f'rank_groups_{abs(hash(tuple(sub_cluster_anchor_nodes)))}') as rg:
-                            rg.attr(rank='same')
-                            for nid in sub_cluster_anchor_nodes:
-                                rg.node(nid)
-                        # Add invisible edges to maintain order
-                        for i in range(len(sub_cluster_anchor_nodes) - 1):
-                            outer_cluster.edge(sub_cluster_anchor_nodes[i], sub_cluster_anchor_nodes[i + 1], style='invis', weight='15')
+                    _layout_group_anchors(outer_cluster, sub_cluster_anchor_nodes)
     
     # Remove extension from output_path if present
     output_base = str(Path(output_path).with_suffix(''))
