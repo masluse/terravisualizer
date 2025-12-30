@@ -129,8 +129,9 @@ def group_resources_hierarchically(
                 # Check if this ID already exists for this resource type
                 key = (resource.resource_type, id_str)
                 if key in parent_resources:
-                    # ID collision! Use resource name as differentiator
-                    id_str = f"{id_str}#{resource.name}"
+                    # ID collision! Use a unique separator that's unlikely in real IDs
+                    # Format: "original_id|||resource_name"
+                    id_str = f"{id_str}|||{resource.name}"
                     key = (resource.resource_type, id_str)
                 
                 parent_resources[key] = resource
@@ -160,8 +161,8 @@ def group_resources_hierarchically(
                     if parent_type == resource.resource_type:
                         continue
                     
-                    # Remove collision suffix if present (format: "id#name")
-                    parent_id_clean = parent_id_val.split('#')[0] if '#' in parent_id_val else parent_id_val
+                    # Remove collision suffix if present (format: "id|||name")
+                    parent_id_clean = parent_id_val.split('|||')[0] if '|||' in parent_id_val else parent_id_val
                     
                     # Try exact match first (case-sensitive)
                     if parent_id_str == parent_id_clean:
