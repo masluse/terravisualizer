@@ -122,6 +122,10 @@ def group_resources_hierarchically(
                 # Find parent resource - normalize parent_id for comparison
                 parent_id_lower = str(parent_id).lower()
                 for (parent_type, parent_id_val), potential_parent in parent_resources.items():
+                    # Skip if the potential parent is of the same type as the child
+                    # (resources shouldn't be nested inside resources of the same type)
+                    if parent_type == resource.resource_type:
+                        continue
                     if parent_id_lower == parent_id_val.lower():
                         resource_to_parent[resource] = potential_parent
                         parent_key = f"{potential_parent.resource_type}.{potential_parent.name}"
