@@ -11,6 +11,11 @@ from graphviz import Digraph
 from terravisualizer.config_parser import get_resource_config
 from terravisualizer.plan_parser import Resource
 
+# Constants for gray color calculation
+GRAY_BASE_VALUE = 245  # Starting point (very light gray, #f5f5f5)
+GRAY_REDUCTION_PER_LEVEL = 10  # How much darker per nesting level
+GRAY_MIN_VALUE = 200  # Minimum gray value to prevent too dark colors (#c8c8c8)
+
 
 def extract_grouping_hierarchy(
     resources: List[Resource],
@@ -251,11 +256,12 @@ def generate_diagram(
     # Group resources hierarchically
     grouped, parent_to_children = group_resources_hierarchically(resources, config)
     
-    # Generate title and timestamp
-    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    # Generate title and timestamp (use single datetime call)
+    now = datetime.now()
+    timestamp = now.strftime('%Y-%m-%d %H:%M:%S')
     if not title:
         # Generate a run number based on timestamp (unique identifier)
-        run_number = datetime.now().strftime('%Y%m%d%H%M%S')
+        run_number = now.strftime('%Y%m%d%H%M%S')
         title = f"Run #{run_number}"
     
     # Create directed graph with modern layout settings
@@ -529,12 +535,8 @@ def _get_gray_color(depth: int) -> str:
     Returns:
         Hex color string
     """
-    # Start at very light gray (#f5f5f5) and get slightly darker with each level
-    # Each level reduces by ~10 in RGB value (out of 255)
-    base = 245  # Starting point (very light)
-    reduction = 10  # How much darker per level
-    
-    value = max(200, base - (depth * reduction))  # Don't go darker than #c8c8c8
+    # Use module constants for gray color calculation
+    value = max(GRAY_MIN_VALUE, GRAY_BASE_VALUE - (depth * GRAY_REDUCTION_PER_LEVEL))
     hex_value = format(value, '02x')
     return f'#{hex_value}{hex_value}{hex_value}'
 
@@ -692,6 +694,19 @@ def _apply_parent_cluster_style(cluster, label: str, depth: int = 2) -> None:
     cluster.attr(margin='24')  # Increased margin for better spacing
 
 
+def _escape_html(text: str) -> str:
+    """
+    Escape special characters in text for HTML/Graphviz labels.
+    
+    Args:
+        text: Text to escape
+        
+    Returns:
+        HTML-escaped text
+    """
+    return text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+
+
 def _create_node_label(resource_type: str, display_name: str, icon_path: str = '') -> str:
     """
     Create an HTML-like label for a node with optional icon, resource type, and name.
@@ -709,8 +724,8 @@ def _create_node_label(resource_type: str, display_name: str, icon_path: str = '
         HTML-like label string for Graphviz
     """
     # Escape special characters in text for HTML
-    resource_type_escaped = _ellipsize(resource_type.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;'), 40)
-    display_name_escaped = _ellipsize(display_name.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;'), 35)
+    resource_type_escaped = _ellipsize(_escape_html(resource_type), 40)
+    display_name_escaped = _ellipsize(_escape_html(display_name), 35)
 
     icon_cell = ''
     if icon_path:
