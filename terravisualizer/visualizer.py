@@ -277,10 +277,10 @@ def generate_diagram(
     dot.attr(compound='true')
     dot.attr(concentrate='false')
     dot.attr(newrank='true')
-    dot.attr(nodesep='0.6')   # Horizontal spacing between nodes
-    dot.attr(ranksep='0.8')   # Vertical spacing between ranks
-    dot.attr(pad='1.5')       # Padding around the graph (increased for outer container)
-    dot.attr(margin='1.2')    # Increased margin
+    dot.attr(nodesep='0.4')   # Horizontal spacing between nodes
+    dot.attr(ranksep='0.5')   # Vertical spacing between ranks
+    dot.attr(pad='0.3')       # Reduced padding around the graph (space to image border)
+    dot.attr(margin='0.2')    # Reduced margin (space between graph edge and content)
     dot.attr(dpi='300')       # Much higher DPI for crisp, professional output
     
     # Light background for outer container with title header
@@ -343,7 +343,7 @@ def generate_diagram(
                 # Gray styling with slight transparency (level 1: ~10% gray)
                 gray_level_outer = _get_gray_color(depth=1)
                 outer_cluster.attr(style='filled,rounded', color='#a0a0a0', fillcolor=gray_level_outer, penwidth='2.0')
-                outer_cluster.attr(margin='40')  # Increased margin for better spacing
+                outer_cluster.attr(margin='40')  # Margin for better spacing
                 
                 # Check if we need sub-clusters or can place resources directly
                 has_only_resources_key = len(sub_groups) == 1 and ('resources',) in sub_groups
@@ -415,6 +415,9 @@ def generate_diagram(
                     resources_subgroup = sub_groups.get(('resources',), [])
                     other_subgroups = {k: v for k, v in sub_groups.items() if k != ('resources',)}
                     
+                    # Track anchor nodes from sub-clusters for grid layout
+                    sub_cluster_anchor_nodes: List[str] = []
+                    
                     # Process 'resources' subgroup - place parent resources directly in outer cluster
                     direct_node_ids: List[str] = []
                     for resource in resources_subgroup:
@@ -441,6 +444,8 @@ def generate_diagram(
                                 
                                 if child_node_ids:
                                     _layout_nodes_in_grid(parent_cluster, child_node_ids, max_cols=2)
+                                    # Track first child as anchor for this parent cluster
+                                    sub_cluster_anchor_nodes.append(child_node_ids[0])
                         else:
                             # Regular node without children - place directly in outer cluster
                             node_id = f'node_{node_counter}'
@@ -458,6 +463,8 @@ def generate_diagram(
                     # Layout direct nodes if any
                     if direct_node_ids:
                         _layout_nodes_in_grid(outer_cluster, direct_node_ids, max_cols=3)
+                        # Track first direct node as anchor
+                        sub_cluster_anchor_nodes.append(direct_node_ids[0])
                     
                     # Now process other sub-groups
                     for sub_key, resources_in_group in sorted(other_subgroups.items()):
@@ -524,6 +531,12 @@ def generate_diagram(
                             # Layout nodes in grid
                             if sub_node_ids:
                                 _layout_nodes_in_grid(sub_cluster, sub_node_ids, max_cols=2)
+                                # Track first node as anchor for this sub-cluster
+                                sub_cluster_anchor_nodes.append(sub_node_ids[0])
+                    
+                    # Apply grid layout to sub-clusters using anchor nodes
+                    if len(sub_cluster_anchor_nodes) > 1:
+                        _layout_nodes_in_grid(outer_cluster, sub_cluster_anchor_nodes, max_cols=3)
     
     # Remove extension from output_path if present
     output_base = str(Path(output_path).with_suffix(''))
@@ -738,8 +751,9 @@ def _create_node_label(resource_type: str, display_name: str, icon_path: str = '
         HTML-like label string for Graphviz
     """
     # Escape special characters in text for HTML
-    resource_type_escaped = _ellipsize(_escape_html(resource_type), 40)
-    display_name_escaped = _ellipsize(_escape_html(display_name), 35)
+    # Don't truncate resource type and display name - show full names
+    resource_type_escaped = _escape_html(resource_type)
+    display_name_escaped = _escape_html(display_name)
 
     icon_cell = ''
     if icon_path:
@@ -787,12 +801,18 @@ def _shorten_path_name(name: str) -> str:
     """
     Shorten a path-like name by keeping only the part after the last '/'.
     
+    Does NOT shorten if the string contains '@' (e.g., email addresses like
+    user:alice@example.com should remain intact).
+    
     Args:
         name: The name to shorten (may contain '/' characters)
         
     Returns:
-        The shortened name (only text after the last '/')
+        The shortened name (only text after the last '/' if no '@' present)
     """
+    # Don't shorten if the string contains '@' (email addresses, service accounts, etc.)
+    if '@' in name:
+        return name
     if '/' in name:
         return name.rsplit('/', 1)[-1]
     return name

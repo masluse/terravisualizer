@@ -118,6 +118,7 @@ def load_config(config_path: str) -> Dict[str, Any]:
     Load and parse configuration file.
     
     Supports both HCL-like format and JSON format.
+    Resolves relative paths for diagram_image based on config file location.
     
     Args:
         config_path: Path to the configuration file
@@ -126,6 +127,7 @@ def load_config(config_path: str) -> Dict[str, Any]:
         Parsed configuration dictionary
     """
     path = Path(config_path)
+    config_dir = path.parent.resolve()
     
     with open(path, 'r') as f:
         content = f.read()
@@ -133,12 +135,24 @@ def load_config(config_path: str) -> Dict[str, Any]:
     # Try JSON first
     if path.suffix == '.json':
         try:
-            return json.loads(content)
+            config = json.loads(content)
         except json.JSONDecodeError:
-            pass
+            config = parse_hcl_to_dict(content)
+    else:
+        # Try HCL-like format
+        config = parse_hcl_to_dict(content)
     
-    # Try HCL-like format
-    return parse_hcl_to_dict(content)
+    # Resolve relative paths for diagram_image based on config file location
+    for resource_type, resource_config in config.items():
+        if isinstance(resource_config, dict) and 'diagram_image' in resource_config:
+            image_path = resource_config['diagram_image']
+            if image_path and not Path(image_path).is_absolute():
+                # Resolve relative to config file directory
+                resolved_path = config_dir / image_path
+                if resolved_path.exists():
+                    resource_config['diagram_image'] = str(resolved_path)
+    
+    return config
 
 
 def get_resource_config(config: Dict[str, Any], resource_type: str) -> Dict[str, Any]:
