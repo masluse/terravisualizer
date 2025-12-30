@@ -294,10 +294,10 @@ def generate_diagram(
             # Set outer cluster label with modern styling
             outer_label = _format_outer_group_label(outer_key)
             outer_cluster.attr(label=outer_label, fontsize='22', fontname='Inter-Bold,SF Pro Display-Bold,Helvetica Neue-Bold,Arial-Bold,sans-serif-bold')
-            # Modern gradient-like fill with subtle shadow effect
-            outer_cluster.attr(style='filled,rounded', color='#667eea:#764ba2', fillcolor='#f6f8ff:#fef5ff', penwidth='3.0')
+            # Modern styling with solid colors for maximum compatibility
+            # Using a solid purple-blue color instead of gradients
+            outer_cluster.attr(style='filled,rounded', color='#667eea', fillcolor='#f0f4ff', penwidth='3.0')
             outer_cluster.attr(margin='35')
-            outer_cluster.attr(gradientangle='135')  # Diagonal gradient
             
             # Check if we need sub-clusters or can place resources directly
             # If there's only one sub-group and it's named 'resources', skip sub-clustering
@@ -374,13 +374,13 @@ def generate_diagram(
                         
                         if sub_label:
                             sub_cluster.attr(label=sub_label, fontsize='15', fontname='Inter,SF Pro Display,Helvetica Neue,Arial,sans-serif')
-                            # Subtle gradient for regular sub-groups
-                            sub_cluster.attr(style='filled,rounded', color='#bdc3c7:#ecf0f1', fillcolor='#ffffff:#f9fafb', penwidth='2.0')
+                            # Subtle styling for regular sub-groups
+                            sub_cluster.attr(style='filled,rounded', color='#bdc3c7', fillcolor='#f9fafb', penwidth='2.0')
                             sub_cluster.attr(margin='18')
                         else:
                             # No label, minimal styling with subtle border
                             sub_cluster.attr(label='', fontsize='14')
-                            sub_cluster.attr(style='filled,rounded', color='#e8eaed:#f1f3f4', fillcolor='#ffffff', penwidth='1.5')
+                            sub_cluster.attr(style='filled,rounded', color='#e8eaed', fillcolor='#ffffff', penwidth='1.5')
                             sub_cluster.attr(margin='12')
                         
                         sub_node_ids: List[str] = []
@@ -401,8 +401,9 @@ def generate_diagram(
                                     # Label with parent name
                                     parent_cluster.attr(label=display_name, fontsize='16', 
                                                       fontname='Inter-SemiBold,SF Pro Display-SemiBold,Helvetica Neue-SemiBold,Arial,sans-serif')
-                                    parent_cluster.attr(style='filled,rounded', color='#56ab2f:#a8e063', 
-                                                      fillcolor='#f0fff4:#e6fffa', penwidth='2.5')
+                                    # Green theme for parent-child groups
+                                    parent_cluster.attr(style='filled,rounded', color='#56ab2f', 
+                                                      fillcolor='#e8f5e9', penwidth='2.5')
                                     parent_cluster.attr(margin='20')
                                     
                                     # Render children inside this cluster
@@ -476,8 +477,8 @@ def _create_node_label(resource_type: str, display_name: str, icon_path: str = '
                 f'</TD>'
             )
         else:
-            # Modern placeholder icon with gradient-like effect
-            icon_cell = '<TD WIDTH="56" HEIGHT="56" FIXEDSIZE="TRUE" BGCOLOR="#e8f0fe:#dbe7ff" BORDER="0" STYLE="rounded"><FONT POINT-SIZE="28">📦</FONT></TD>'
+            # Modern placeholder icon with solid color
+            icon_cell = '<TD WIDTH="56" HEIGHT="56" FIXEDSIZE="TRUE" BGCOLOR="#e8f0fe" BORDER="0" STYLE="rounded"><FONT POINT-SIZE="28">📦</FONT></TD>'
 
     if icon_cell:
         # Node with icon - modern card-like appearance with shadow
@@ -486,8 +487,8 @@ def _create_node_label(resource_type: str, display_name: str, icon_path: str = '
   <TR>
     {icon_cell}
     <TD ALIGN="LEFT" BALIGN="LEFT" CELLPADDING="8">
-      <FONT POINT-SIZE="16" COLOR="#1f2937" FACE="Inter-SemiBold,SF Pro Display-SemiBold,Helvetica Neue-SemiBold"><B>{resource_type_escaped}</B></FONT><BR/>
-      <FONT POINT-SIZE="12" COLOR="#6b7280" FACE="Inter,SF Pro Display,Helvetica Neue">{display_name_escaped}</FONT>
+      <FONT POINT-SIZE="16" COLOR="#1f2937"><B>{resource_type_escaped}</B></FONT><BR/>
+      <FONT POINT-SIZE="12" COLOR="#6b7280">{display_name_escaped}</FONT>
     </TD>
   </TR>
 </TABLE>>'''
@@ -497,8 +498,8 @@ def _create_node_label(resource_type: str, display_name: str, icon_path: str = '
 <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="18" BGCOLOR="white" COLOR="#d0d7de" STYLE="rounded">
   <TR>
     <TD ALIGN="CENTER" BALIGN="CENTER">
-      <FONT POINT-SIZE="16" COLOR="#1f2937" FACE="Inter-SemiBold,SF Pro Display-SemiBold,Helvetica Neue-SemiBold"><B>{resource_type_escaped}</B></FONT><BR/>
-      <FONT POINT-SIZE="12" COLOR="#6b7280" FACE="Inter,SF Pro Display,Helvetica Neue">{display_name_escaped}</FONT>
+      <FONT POINT-SIZE="16" COLOR="#1f2937"><B>{resource_type_escaped}</B></FONT><BR/>
+      <FONT POINT-SIZE="12" COLOR="#6b7280">{display_name_escaped}</FONT>
     </TD>
   </TR>
 </TABLE>>'''
