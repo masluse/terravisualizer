@@ -20,6 +20,10 @@ GRAY_MIN_VALUE = 200  # Minimum gray value to prevent too dark colors (#c8c8c8)
 ICON_CELL_WIDTH = 64  # Width of icon cell in pixels
 MIN_TEXT_CELL_WIDTH = 200  # Minimum width of text cell for uniform box sizes
 
+# Constants for text width estimation
+CHAR_WIDTH_LARGE_FONT = 8  # Estimated width per character for 16pt bold font
+CHAR_WIDTH_SMALL_FONT = 6  # Estimated width per character for 11pt font
+
 
 def extract_grouping_hierarchy(
     resources: List[Resource],
@@ -249,12 +253,15 @@ def calculate_max_widths_per_type(
     Calculate the maximum text width needed for each resource type.
     This ensures all instances of a resource type have uniform box sizes.
     
+    Width is estimated based on character count using average character widths
+    for the display fonts (16pt bold for names, 11pt for resource types).
+    
     Args:
         resources: List of all resources
         config: Configuration dictionary
         
     Returns:
-        Dictionary mapping resource_type to max width in pixels
+        Dictionary mapping resource_type to estimated max width in pixels
     """
     type_widths = {}
     
@@ -262,10 +269,9 @@ def calculate_max_widths_per_type(
         resource_config = get_resource_config(config, resource.resource_type)
         display_name = get_display_name(resource, resource_config)
         
-        # Estimate width: rough approximation based on character count
-        # Assume average character width of ~8px for 16pt bold font
-        display_name_width = len(display_name) * 8
-        resource_type_width = len(resource.resource_type) * 6  # Smaller font
+        # Estimate width based on character count and font sizes
+        display_name_width = len(display_name) * CHAR_WIDTH_LARGE_FONT
+        resource_type_width = len(resource.resource_type) * CHAR_WIDTH_SMALL_FONT
         
         # Take the max of the two text elements
         estimated_width = max(display_name_width, resource_type_width)
@@ -845,7 +851,8 @@ def _escape_html(text: str) -> str:
     return text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
 
-def _create_node_label(resource_type: str, display_name: str, icon_path: str = '', text_width: Optional[int] = None) -> str:
+def _create_node_label(resource_type: str, display_name: str, icon_path: str = '', 
+                       custom_text_width: Optional[int] = None) -> str:
     """
     Create an HTML-like label for a node with optional icon, resource type, and name.
     Modern cloud diagram aesthetics with shadows and depth.
@@ -858,13 +865,13 @@ def _create_node_label(resource_type: str, display_name: str, icon_path: str = '
         resource_type: The resource type (shown as small subtitle)
         display_name: The display name (shown as big bold name)
         icon_path: Path to the icon image (optional)
-        text_width: Optional custom width for text cell (for uniform sizing per type)
+        custom_text_width: Optional custom width for text cell in pixels (for uniform sizing per type)
         
     Returns:
         HTML-like label string for Graphviz
     """
     # Use provided width or fallback to default
-    cell_width = text_width if text_width is not None else MIN_TEXT_CELL_WIDTH
+    cell_width = custom_text_width if custom_text_width is not None else MIN_TEXT_CELL_WIDTH
     
     # Escape special characters in text for HTML
     # Don't truncate resource type and display name - show full names
@@ -919,13 +926,15 @@ def _shorten_path_name(name: str) -> str:
     """
     Shorten a path-like name by keeping only the part after the last '/'.
     
-    If the string contains brackets [...], extract the content from within the brackets first.
-    Then, apply shortening logic only if there's no '@' in the extracted/remaining part.
+    If the string contains brackets [...], extract the content from within the rightmost
+    bracket pair first. Then, apply shortening logic only if there's no '@' in the 
+    extracted/remaining part.
     
     Examples:
         "serviceAccount:prj-k8s@example.com[kubexporter/kubexporter-job]" -> "kubexporter-job"
         "path/to/resource" -> "resource"
         "user@example.com" -> "user@example.com" (no shortening)
+        "test[foo]bar[baz]" -> "baz" (uses rightmost bracket)
     
     Args:
         name: The name to shorten (may contain '/' characters and brackets)
@@ -933,12 +942,14 @@ def _shorten_path_name(name: str) -> str:
     Returns:
         The shortened name
     """
-    # Extract content from brackets if present
+    # Extract content from rightmost brackets if present
     if '[' in name and ']' in name:
-        start = name.find('[')
+        # Find the last opening bracket
+        start = name.rfind('[')
+        # Find the closing bracket after it
         end = name.find(']', start)
         if end > start:
-            # Extract content from brackets
+            # Extract content from rightmost brackets
             name = name[start + 1:end]
     
     # Now apply the shortening logic
