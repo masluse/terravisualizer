@@ -293,12 +293,12 @@ def generate_diagram(
     dot.attr(fontsize='13')
     
     # Set the graph label with title on the left and timestamp on the right using HTML table
-    # Using a large spacer to push timestamp towards the right
+    # Using a very wide middle spacer cell to push timestamp to the right edge
     header_label = f'''<
 <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="8">
   <TR>
     <TD ALIGN="LEFT"><B><FONT POINT-SIZE="24" COLOR="#1f2937">{title}</FONT></B></TD>
-    <TD WIDTH="400"></TD>
+    <TD WIDTH="800">&nbsp;</TD>
     <TD ALIGN="RIGHT"><FONT POINT-SIZE="14" COLOR="#6b7280">{timestamp}</FONT></TD>
   </TR>
 </TABLE>>'''
