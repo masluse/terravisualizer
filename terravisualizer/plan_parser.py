@@ -8,18 +8,24 @@ from typing import Any, Dict, List
 class Resource:
     """Represents a Terraform resource."""
     
-    def __init__(self, resource_type: str, name: str, values: Dict[str, Any]):
+    def __init__(self, resource_type: str, name: str, values: Dict[str, Any], address: str = None):
         """
         Initialize a resource.
         
         Args:
             resource_type: The type of resource (e.g., "google_compute_address")
-            name: The resource name
+            name: The resource name (may include index, e.g., "default[0]")
             values: The resource values/attributes
+            address: The unique Terraform address (e.g., "google_compute_address.static_ip_1").
+                     If not provided, defaults to "{resource_type}.{name}".
+                     The address from Terraform plan JSON is always well-formed and safe to use.
         """
         self.resource_type = resource_type
         self.name = name
         self.values = values
+        # Use provided address (from Terraform JSON) or construct from type and name
+        # The fallback ensures uniqueness since name includes any indices
+        self.address = address if address else f"{resource_type}.{name}"
     
     def get_value(self, path: str) -> Any:
         """
@@ -73,6 +79,7 @@ def parse_terraform_plan(plan_path: str) -> List[Resource]:
         for change in plan_data['resource_changes']:
             resource_type = change.get('type', '')
             name = change.get('name', '')
+            address = change.get('address', '')
             
             # If resource has an index, append it to name to make it unique
             index = change.get('index')
@@ -86,7 +93,7 @@ def parse_terraform_plan(plan_path: str) -> List[Resource]:
             
             # Avoid duplicates
             if not any(r.resource_type == resource_type and r.name == name for r in resources):
-                resources.append(Resource(resource_type, name, values))
+                resources.append(Resource(resource_type, name, values, address))
     
     return resources
 
@@ -108,6 +115,7 @@ def _extract_from_module(module: Dict[str, Any]) -> List[Resource]:
         for resource_data in module['resources']:
             resource_type = resource_data.get('type', '')
             name = resource_data.get('name', '')
+            address = resource_data.get('address', '')
             
             # If resource has an index, append it to name to make it unique
             # This handles cases like module.foo["key"].resource.default["index"]
@@ -118,7 +126,7 @@ def _extract_from_module(module: Dict[str, Any]) -> List[Resource]:
             
             values = resource_data.get('values', {})
             
-            resources.append(Resource(resource_type, name, values))
+            resources.append(Resource(resource_type, name, values, address))
     
     # Recursively extract from child modules
     if 'child_modules' in module:

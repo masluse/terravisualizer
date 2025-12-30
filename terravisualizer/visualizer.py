@@ -120,18 +120,18 @@ def group_resources_hierarchically(
                         # Construct the service account email format
                         id_value = f"{account_id}@{project}.iam.gserviceaccount.com"
                 
-                # If still no ID, use a fallback based on resource name
+                # If still no ID, use a fallback based on resource address (unique)
                 if not id_value:
-                    id_value = f"{resource.resource_type}/{resource.name}"
+                    id_value = resource.address
             
             if id_value:
                 id_str = str(id_value)
                 # Check if this ID already exists for this resource type
                 key = (resource.resource_type, id_str)
                 if key in parent_resources:
-                    # ID collision! Use a unique separator that's unlikely in real IDs
-                    # Format: "original_id|||resource_name"
-                    id_str = f"{id_str}|||{resource.name}"
+                    # ID collision! Use resource address for uniqueness
+                    # This ensures each resource gets a truly unique identifier
+                    id_str = f"{id_str}|||{resource.address}"
                     key = (resource.resource_type, id_str)
                 
                 parent_resources[key] = resource
@@ -794,6 +794,10 @@ def _render_grouped_children(
         # Track first node from each sub-cluster for vertical stacking
         sub_cluster_first_nodes: List[str] = []
         
+        # Track default/unknown nodes for layout
+        defaultish_node_ids: List[str] = []
+        defaultish_node_types: Dict[str, str] = {}
+        
         for group_key, children in sorted(grouped_children.items()):
             if group_key == 'default' or group_key == 'unknown':
                 # Render default/unknown directly without a sub-cluster
@@ -804,6 +808,10 @@ def _render_grouped_children(
                     all_child_node_ids.append(child_node_id)
                     if node_types is not None:
                         node_types[child_node_id] = child.resource_type
+                    
+                    # Track for layout application
+                    defaultish_node_ids.append(child_node_id)
+                    defaultish_node_types[child_node_id] = child.resource_type
                     
                     child_config = get_resource_config(config, child.resource_type)
                     child_display_name = get_display_name(child, child_config)
@@ -855,6 +863,10 @@ def _render_grouped_children(
                         _layout_nodes_by_type(sub_cluster, group_node_ids, group_node_types)
                         # Track first node for vertical stacking of sub-clusters
                         sub_cluster_first_nodes.append(group_node_ids[0])
+        
+        # Apply layout to default/unknown nodes
+        if defaultish_node_ids:
+            _layout_nodes_by_type(parent_graph, defaultish_node_ids, defaultish_node_types)
         
         # Stack sub-clusters vertically with invisible edges
         if len(sub_cluster_first_nodes) > 1:
