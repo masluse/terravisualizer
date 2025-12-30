@@ -319,18 +319,6 @@ def generate_diagram(
     
     sorted_groups = sorted(grouped.items(), key=sort_key)
     
-    # Calculate total number of resources for layout optimization
-    total_resources = sum(
-        len(res_list) 
-        for sub_groups in grouped.values() 
-        for res_list in sub_groups.values()
-    )
-    total_groups = len(grouped)
-    
-    # Determine optimal layout direction for more square output
-    # If we have many groups, prefer horizontal layout to avoid too tall diagrams
-    prefer_horizontal = total_groups > 3 or total_resources > 10
-    
     # Create the main diagram container
     # Note: Graphviz doesn't support true dotted/textured backgrounds natively
     # Using a subtle light gray fill to provide visual distinction
@@ -763,8 +751,10 @@ def _create_node_label(resource_type: str, display_name: str, icon_path: str = '
                 f'<IMG SRC="{icon_abs_path}" SCALE="TRUE"/>'
                 f'</TD>'
             )
-        # If icon doesn't exist, don't show a placeholder - just skip the icon cell
-        # This avoids issues with emoji rendering in Graphviz
+        else:
+            # If icon doesn't exist, don't show a placeholder - just skip the icon cell
+            # This avoids issues with emoji rendering in Graphviz
+            icon_cell = ''
 
     if icon_cell:
         # Node with icon - modern card-like appearance
