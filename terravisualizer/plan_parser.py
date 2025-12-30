@@ -50,28 +50,52 @@ class Resource:
         return f"Resource({self.resource_type}, {self.name})"
 
 
-def _dedup_by_address_strict(resources: List[Resource]) -> List[Resource]:
+def _merge_by_address(resources: List[Resource]) -> List[Resource]:
     """
-    Option B: Deduplicate exactly once by Terraform address.
+    Merge resources by Terraform address.
 
-    - Trusts the plan structure (we collect everything we see)
-    - Enforces address uniqueness
-    - Fails fast if duplicates are encountered (signals double-parsing)
+    - Uses address as the unique key
+    - If duplicates occur (planned_values + resource_changes), merge fields
+    - Prefers the resource that has more values (and keeps non-empty strings)
     """
     by_addr: Dict[str, Resource] = {}
+
+    def score(r: Resource) -> int:
+        # simple heuristic: more known fields => higher score
+        return len(r.values or {})
+
     for r in resources:
         addr = r.address or f"{r.resource_type}.{r.name}"
-        r.address = addr  # normalize back
+        r.address = addr
 
-        if addr in by_addr:
-            # Fail fast instead of silently dropping/overwriting
-            raise ValueError(
-                f"Duplicate Terraform address encountered: {addr}\n"
-                f"Existing: {by_addr[addr].resource_type}.{by_addr[addr].name}\n"
-                f"New:      {r.resource_type}.{r.name}"
-            )
+        if addr not in by_addr:
+            by_addr[addr] = r
+            continue
 
-        by_addr[addr] = r
+        existing = by_addr[addr]
+
+        # Decide which one is "base" (keep name/type/address from it)
+        base, other = (existing, r)
+        if score(r) > score(existing):
+            base, other = (r, existing)
+
+        # Merge values (base wins, but fill missing from other)
+        merged_values = dict(base.values or {})
+        for k, v in (other.values or {}).items():
+            if k not in merged_values or merged_values[k] in (None, "", [], {}):
+                merged_values[k] = v
+
+        base.values = merged_values
+
+        # Keep the best display name (prefer longer / non-empty)
+        if (not base.name) and other.name:
+            base.name = other.name
+        elif other.name and len(other.name) > len(base.name):
+            # optional: only replace if base.name is generic like "default"
+            if base.name in ("default", ""):
+                base.name = other.name
+
+        by_addr[addr] = base
 
     return list(by_addr.values())
 
@@ -117,7 +141,7 @@ def parse_terraform_plan(plan_path: str) -> List[Resource]:
             resources.append(Resource(resource_type, name, values, address))
 
     # Option B: dedup once at the end by address (strict)
-    return _dedup_by_address_strict(resources)
+    return _merge_by_address(resources)
 
 
 def _extract_from_module(module: Dict[str, Any]) -> List[Resource]:
