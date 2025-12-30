@@ -171,17 +171,6 @@ def group_resources_hierarchically(
                         matched_parent = potential_parent
                         break
                     
-                    # For google_service_account, try matching with constructed email
-                    if parent_type == 'google_service_account' and not matched_parent:
-                        # Check if child's service_account_id matches constructed format
-                        if '@' in parent_id_str and '@' in parent_id_clean:
-                            # Both have email format, try matching email part
-                            child_email = parent_id_str.split('/')[-1] if '/' in parent_id_str else parent_id_str
-                            parent_email = parent_id_clean.split('/')[-1] if '/' in parent_id_clean else parent_id_clean
-                            if child_email.lower() == parent_email.lower():
-                                matched_parent = potential_parent
-                                break
-                    
                     # Fallback to case-insensitive match
                     if parent_id_str.lower() == parent_id_clean.lower():
                         matched_parent = potential_parent
