@@ -108,10 +108,12 @@ def group_resources_hierarchically(
         resource_config = get_resource_config(config, resource.resource_type)
         if resource_config and 'id' in resource_config:
             id_field = resource_config['id']
-            id_value = resource.get_value(id_field)
+            
+            # Expand template if present, otherwise get value directly
+            id_value = expand_template_field(resource, id_field, fallback='')
             
             # If id_value is None or empty, try to construct a fallback ID
-            if id_value is None or id_value == '':
+            if not id_value or id_value == '':
                 # For google_service_account, try to construct from account_id and project
                 if resource.resource_type == 'google_service_account':
                     account_id = resource.get_value('values.account_id')
@@ -148,7 +150,9 @@ def group_resources_hierarchically(
         # Check if this resource has a parent (group_id)
         if resource_config and 'group_id' in resource_config:
             group_id_field = resource_config['group_id']
-            parent_id = resource.get_value(group_id_field)
+            
+            # Expand template if present, otherwise get value directly
+            parent_id = expand_template_field(resource, group_id_field, fallback='')
             
             if parent_id:
                 # Find parent resource - do case-sensitive exact matching
@@ -250,6 +254,50 @@ def group_resources_hierarchically(
     return outer_groups, parent_to_children
 
 
+def expand_template_field(resource: Resource, template: str, fallback: str = '') -> str:
+    """
+    Expand a template field by replacing ${field} placeholders with actual values.
+    Supports template syntax like "${values.member}-${values.role}".
+    
+    Args:
+        resource: The resource
+        template: Template string with ${} placeholders
+        fallback: Fallback value if template evaluation results in empty string
+        
+    Returns:
+        Expanded string
+    """
+    # Check if it's a template with ${} syntax
+    if '${' in template and '}' in template:
+        # Extract all ${...} patterns
+        pattern = r'\$\{([^}]+)\}'
+        matches = re.findall(pattern, template)
+        
+        result = template
+        for match in matches:
+            field_path = match.strip()
+            value = resource.get_value(field_path)
+            
+            # Replace ${field} with the actual value (or empty string if not found)
+            replacement = str(value) if value is not None else ''
+            result = result.replace(f'${{{match}}}', replacement)
+        
+        # Clean up any double separators (e.g., "--" or " - ")
+        result = re.sub(r'-{2,}', '-', result)
+        result = re.sub(r'^-|-$', '', result)  # Remove leading/trailing dashes
+        
+        return result.strip() if result.strip() else fallback
+    else:
+        # Legacy support: treat as direct field path
+        value = resource.get_value(template)
+        
+        if value:
+            return str(value)
+        
+        # Fallback
+        return fallback
+
+
 def get_display_name(resource: Resource, resource_config: Dict[str, Any]) -> str:
     """
     Get the display name for a resource based on configuration.
@@ -263,36 +311,7 @@ def get_display_name(resource: Resource, resource_config: Dict[str, Any]) -> str
         Display name string
     """
     name_template = resource_config.get('name', 'name')
-    
-    # Check if it's a template with ${} syntax
-    if '${' in name_template and '}' in name_template:
-        # Extract all ${...} patterns
-        pattern = r'\$\{([^}]+)\}'
-        matches = re.findall(pattern, name_template)
-        
-        result = name_template
-        for match in matches:
-            field_path = match.strip()
-            value = resource.get_value(field_path)
-            
-            # Replace ${field} with the actual value (or empty string if not found)
-            replacement = str(value) if value is not None else ''
-            result = result.replace(f'${{{match}}}', replacement)
-        
-        # Clean up any double separators (e.g., "--" or " - ")
-        result = re.sub(r'-{2,}', '-', result)
-        result = re.sub(r'^-|-$', '', result)  # Remove leading/trailing dashes
-        
-        return result.strip() if result.strip() else resource.name
-    else:
-        # Legacy support: treat as direct field path
-        display_name = resource.get_value(name_template)
-        
-        if display_name:
-            return str(display_name)
-        
-        # Fallback to resource name
-        return resource.name
+    return expand_template_field(resource, name_template, resource.name)
 
 
 def calculate_max_widths_per_type(
@@ -667,16 +686,12 @@ def generate_diagram(
                                 # If no direct nodes but has parent clusters, use first parent cluster node
                                 sub_cluster_anchor_nodes.append(parent_cluster_nodes[0])
                     
-                    # Apply grid layout to sub-clusters using anchor nodes (groups side by side)
+                    # Stack sub-clusters vertically (untereinander) instead of side by side
                     if len(sub_cluster_anchor_nodes) > 1:
-                        # Groups on same level should be side by side (horizontal)
-                        with outer_cluster.subgraph(name=f'rank_groups_{abs(hash(tuple(sub_cluster_anchor_nodes)))}') as rg:
-                            rg.attr(rank='same')
-                            for nid in sub_cluster_anchor_nodes:
-                                rg.node(nid)
-                        # Add invisible edges to maintain order
+                        # Sub-groups should be stacked vertically with invisible edges
+                        # Using weight='10' to ensure vertical stacking without being too tight
                         for i in range(len(sub_cluster_anchor_nodes) - 1):
-                            outer_cluster.edge(sub_cluster_anchor_nodes[i], sub_cluster_anchor_nodes[i + 1], style='invis', weight='15')
+                            outer_cluster.edge(sub_cluster_anchor_nodes[i], sub_cluster_anchor_nodes[i + 1], style='invis', weight='10')
     
     # Remove extension from output_path if present
     output_base = str(Path(output_path).with_suffix(''))
