@@ -944,12 +944,10 @@ def _shorten_path_name(name: str) -> str:
     Returns:
         The shortened name
     """
-    original_name = name
-    
     # If the original string contains '@', don't process it at all
     # This preserves email addresses and service account identifiers
-    if '@' in original_name:
-        return original_name
+    if '@' in name:
+        return name
     
     # Extract content from rightmost brackets if present
     if '[' in name and ']' in name:
