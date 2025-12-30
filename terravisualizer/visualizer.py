@@ -367,6 +367,7 @@ def generate_diagram(
                     # Place resources directly in the outer cluster
                     sub_key, resources_in_group = list(sub_groups.items())[0]
                     sub_node_ids: List[str] = []
+                    sub_node_types: Dict[str, str] = {}  # Track node types for layout
                     
                     for resource in resources_in_group:
                         parent_key = f"{resource.resource_type}.{resource.name}"
@@ -390,20 +391,23 @@ def generate_diagram(
                                 
                                 # Render children (potentially grouped)
                                 child_node_ids: List[str] = []
+                                child_node_types: Dict[str, str] = {}
                                 node_counter = _render_grouped_children(
                                     parent_cluster, grouped_children, config, 
-                                    node_ids, child_node_ids, node_counter, depth=3
+                                    node_ids, child_node_ids, node_counter, depth=3,
+                                    node_types=child_node_types
                                 )
                                 
-                                # Layout children in grid
+                                # Layout children by type (same type vertical, different types horizontal)
                                 if child_node_ids:
-                                    _layout_nodes_in_grid(parent_cluster, child_node_ids, max_cols=2)
+                                    _layout_nodes_by_type(parent_cluster, child_node_ids, child_node_types)
                         else:
                             # Regular node without children
                             node_id = f'node_{node_counter}'
                             node_counter += 1
                             node_ids[f'{resource.resource_type}.{resource.name}'] = node_id
                             sub_node_ids.append(node_id)
+                            sub_node_types[node_id] = resource.resource_type  # Track type
                             
                             resource_config = get_resource_config(config, resource.resource_type)
                             display_name = get_display_name(resource, resource_config)
@@ -412,9 +416,9 @@ def generate_diagram(
                             label = _create_node_label(resource.resource_type, display_name, icon_path)
                             outer_cluster.node(node_id, label=label)
                     
-                    # Layout nodes in grid (only for nodes without children)
+                    # Layout nodes by type (same type vertical, different types horizontal)
                     if sub_node_ids:
-                        _layout_nodes_in_grid(outer_cluster, sub_node_ids, max_cols=3)
+                        _layout_nodes_by_type(outer_cluster, sub_node_ids, sub_node_types)
                 else:
                     # Create sub-clusters within the outer cluster
                     resources_subgroup = sub_groups.get(('resources',), [])
@@ -425,6 +429,7 @@ def generate_diagram(
                     
                     # Process 'resources' subgroup - place parent resources directly in outer cluster
                     direct_node_ids: List[str] = []
+                    direct_node_types: Dict[str, str] = {}  # Track node types
                     for resource in resources_subgroup:
                         parent_key = f"{resource.resource_type}.{resource.name}"
                         
@@ -442,13 +447,15 @@ def generate_diagram(
                                 grouped_children = _group_children_by_config(children, config)
                                 
                                 child_node_ids: List[str] = []
+                                child_node_types: Dict[str, str] = {}
                                 node_counter = _render_grouped_children(
                                     parent_cluster, grouped_children, config,
-                                    node_ids, child_node_ids, node_counter, depth=3
+                                    node_ids, child_node_ids, node_counter, depth=3,
+                                    node_types=child_node_types
                                 )
                                 
                                 if child_node_ids:
-                                    _layout_nodes_in_grid(parent_cluster, child_node_ids, max_cols=2)
+                                    _layout_nodes_by_type(parent_cluster, child_node_ids, child_node_types)
                                     # Track first child as anchor for this parent cluster
                                     sub_cluster_anchor_nodes.append(child_node_ids[0])
                         else:
@@ -457,6 +464,7 @@ def generate_diagram(
                             node_counter += 1
                             node_ids[f'{resource.resource_type}.{resource.name}'] = node_id
                             direct_node_ids.append(node_id)
+                            direct_node_types[node_id] = resource.resource_type
                             
                             resource_config = get_resource_config(config, resource.resource_type)
                             display_name = get_display_name(resource, resource_config)
@@ -465,9 +473,9 @@ def generate_diagram(
                             label = _create_node_label(resource.resource_type, display_name, icon_path)
                             outer_cluster.node(node_id, label=label)
                     
-                    # Layout direct nodes if any
+                    # Layout direct nodes by type
                     if direct_node_ids:
-                        _layout_nodes_in_grid(outer_cluster, direct_node_ids, max_cols=3)
+                        _layout_nodes_by_type(outer_cluster, direct_node_ids, direct_node_types)
                         # Track first direct node as anchor
                         sub_cluster_anchor_nodes.append(direct_node_ids[0])
                     
@@ -491,6 +499,7 @@ def generate_diagram(
                                 sub_cluster.attr(margin='16')
                             
                             sub_node_ids: List[str] = []
+                            sub_node_types: Dict[str, str] = {}  # Track node types
                             
                             for resource in resources_in_group:
                                 parent_key = f"{resource.resource_type}.{resource.name}"
@@ -512,19 +521,22 @@ def generate_diagram(
                                         grouped_children = _group_children_by_config(children, config)
                                         
                                         child_node_ids: List[str] = []
+                                        child_node_types: Dict[str, str] = {}
                                         node_counter = _render_grouped_children(
                                             parent_cluster, grouped_children, config,
-                                            node_ids, child_node_ids, node_counter, depth=4
+                                            node_ids, child_node_ids, node_counter, depth=4,
+                                            node_types=child_node_types
                                         )
                                         
                                         if child_node_ids:
-                                            _layout_nodes_in_grid(parent_cluster, child_node_ids, max_cols=2)
+                                            _layout_nodes_by_type(parent_cluster, child_node_ids, child_node_types)
                                 else:
                                     # Regular node without children
                                     node_id = f'node_{node_counter}'
                                     node_counter += 1
                                     node_ids[f'{resource.resource_type}.{resource.name}'] = node_id
                                     sub_node_ids.append(node_id)
+                                    sub_node_types[node_id] = resource.resource_type
                                     
                                     resource_config = get_resource_config(config, resource.resource_type)
                                     display_name = get_display_name(resource, resource_config)
@@ -533,15 +545,22 @@ def generate_diagram(
                                     label = _create_node_label(resource.resource_type, display_name, icon_path)
                                     sub_cluster.node(node_id, label=label)
                             
-                            # Layout nodes in grid
+                            # Layout nodes by type
                             if sub_node_ids:
-                                _layout_nodes_in_grid(sub_cluster, sub_node_ids, max_cols=2)
+                                _layout_nodes_by_type(sub_cluster, sub_node_ids, sub_node_types)
                                 # Track first node as anchor for this sub-cluster
                                 sub_cluster_anchor_nodes.append(sub_node_ids[0])
                     
-                    # Apply grid layout to sub-clusters using anchor nodes
+                    # Apply grid layout to sub-clusters using anchor nodes (groups side by side)
                     if len(sub_cluster_anchor_nodes) > 1:
-                        _layout_nodes_in_grid(outer_cluster, sub_cluster_anchor_nodes, max_cols=3)
+                        # Groups on same level should be side by side (horizontal)
+                        with outer_cluster.subgraph(name=f'rank_groups_{abs(hash(tuple(sub_cluster_anchor_nodes)))}') as rg:
+                            rg.attr(rank='same')
+                            for nid in sub_cluster_anchor_nodes:
+                                rg.node(nid)
+                        # Add invisible edges to maintain order
+                        for i in range(len(sub_cluster_anchor_nodes) - 1):
+                            outer_cluster.edge(sub_cluster_anchor_nodes[i], sub_cluster_anchor_nodes[i + 1], style='invis', weight='15')
     
     # Remove extension from output_path if present
     output_base = str(Path(output_path).with_suffix(''))
@@ -614,7 +633,8 @@ def _render_grouped_children(
     node_ids: Dict[str, str],
     all_child_node_ids: List[str],
     node_counter: int,
-    depth: int
+    depth: int,
+    node_types: Optional[Dict[str, str]] = None
 ) -> int:
     """
     Render grouped children, creating sub-clusters if there are multiple groups.
@@ -627,6 +647,7 @@ def _render_grouped_children(
         all_child_node_ids: List to collect all child node IDs for layout
         node_counter: Current node counter
         depth: Current nesting depth for gray color
+        node_types: Optional dictionary to track node_id -> resource_type mapping
         
     Returns:
         Updated node counter
@@ -639,6 +660,8 @@ def _render_grouped_children(
             node_counter += 1
             node_ids[f'{child.resource_type}.{child.name}'] = child_node_id
             all_child_node_ids.append(child_node_id)
+            if node_types is not None:
+                node_types[child_node_id] = child.resource_type
             
             child_config = get_resource_config(config, child.resource_type)
             child_display_name = get_display_name(child, child_config)
@@ -656,6 +679,8 @@ def _render_grouped_children(
                     node_counter += 1
                     node_ids[f'{child.resource_type}.{child.name}'] = child_node_id
                     all_child_node_ids.append(child_node_id)
+                    if node_types is not None:
+                        node_types[child_node_id] = child.resource_type
                     
                     child_config = get_resource_config(config, child.resource_type)
                     child_display_name = get_display_name(child, child_config)
@@ -682,12 +707,16 @@ def _render_grouped_children(
                     sub_cluster.attr(margin='16')
                     
                     group_node_ids: List[str] = []
+                    group_node_types: Dict[str, str] = {}
                     for child in children:
                         child_node_id = f'node_{node_counter}'
                         node_counter += 1
                         node_ids[f'{child.resource_type}.{child.name}'] = child_node_id
                         group_node_ids.append(child_node_id)
                         all_child_node_ids.append(child_node_id)
+                        if node_types is not None:
+                            node_types[child_node_id] = child.resource_type
+                        group_node_types[child_node_id] = child.resource_type
                         
                         child_config = get_resource_config(config, child.resource_type)
                         child_display_name = get_display_name(child, child_config)
@@ -696,8 +725,9 @@ def _render_grouped_children(
                         child_label = _create_node_label(child.resource_type, child_display_name, child_icon_path)
                         sub_cluster.node(child_node_id, label=child_label)
                     
+                    # Layout by type (same type vertical, different types horizontal)
                     if group_node_ids:
-                        _layout_nodes_in_grid(sub_cluster, group_node_ids, max_cols=2)
+                        _layout_nodes_by_type(sub_cluster, group_node_ids, group_node_types)
     
     return node_counter
 
@@ -886,6 +916,61 @@ def _format_sub_group_label(sub_key: Tuple[str, ...]) -> str:
     # Shorten path-like values
     shortened_parts = [_shorten_path_name(p) for p in parts]
     return ' | '.join(shortened_parts)
+
+def _layout_nodes_by_type(g: Digraph, node_ids: List[str], node_types: Dict[str, str]) -> None:
+    """
+    Layout nodes so that resources of the same type are stacked vertically,
+    and different types are placed side by side (horizontally).
+    
+    Args:
+        g: The graph/subgraph to layout
+        node_ids: List of node IDs to arrange
+        node_types: Dictionary mapping node_id to resource_type
+    """
+    n = len(node_ids)
+    if n <= 1:
+        return
+    
+    # Group nodes by resource type
+    type_groups: Dict[str, List[str]] = {}
+    for node_id in node_ids:
+        resource_type = node_types.get(node_id, 'unknown')
+        if resource_type not in type_groups:
+            type_groups[resource_type] = []
+        type_groups[resource_type].append(node_id)
+    
+    # Sort type groups for consistent ordering
+    sorted_types = sorted(type_groups.keys())
+    
+    # If all nodes are the same type, stack them vertically
+    if len(sorted_types) == 1:
+        nodes = type_groups[sorted_types[0]]
+        # Stack vertically with invisible edges
+        for i in range(len(nodes) - 1):
+            g.edge(nodes[i], nodes[i + 1], style='invis', weight='10')
+        return
+    
+    # Multiple types: place different types side by side (horizontally)
+    # and same-type resources stacked vertically within each column
+    
+    # Get first node of each type for horizontal alignment
+    first_nodes = [type_groups[t][0] for t in sorted_types]
+    
+    # Put first nodes of each type on the same rank (horizontal alignment)
+    with g.subgraph(name=f'rank_types_{abs(hash(tuple(first_nodes)))}') as rg:
+        rg.attr(rank='same')
+        for nid in first_nodes:
+            rg.node(nid)
+    
+    # Add invisible edges between first nodes to maintain horizontal order
+    for i in range(len(first_nodes) - 1):
+        g.edge(first_nodes[i], first_nodes[i + 1], style='invis', weight='15')
+    
+    # Stack nodes of the same type vertically
+    for resource_type in sorted_types:
+        nodes = type_groups[resource_type]
+        for i in range(len(nodes) - 1):
+            g.edge(nodes[i], nodes[i + 1], style='invis', weight='10')
 
 def _layout_nodes_in_grid(g: Digraph, node_ids: List[str], max_cols: int = 3) -> None:
     """
