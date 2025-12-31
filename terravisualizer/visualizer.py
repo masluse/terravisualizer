@@ -229,8 +229,9 @@ def group_resources_hierarchically(
                     sub_key_parts.append(str(value).lower() if value is not None else 'unknown')
                 sub_key = tuple(sub_key_parts)
             else:
-                # Only one grouping field, no sub-group needed
-                sub_key = ('resources',)
+                # Only one grouping field - use resource type for sub-grouping
+                # This ensures proper separation of different resource types
+                sub_key = (resource.resource_type,)
         
         # Initialize nested structure
         if outer_key not in outer_groups:
