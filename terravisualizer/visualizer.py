@@ -210,6 +210,8 @@ def group_resources_hierarchically(
                 outer_key = (str(first_value).lower() if first_value is not None else 'unknown',)
         
         # Build sub-group key
+        # Always use 'resources' marker to place all resources directly in outer cluster
+        # without creating intermediate sub-clusters, regardless of number of grouping fields
         if not resource_config or 'grouped_by' not in resource_config:
             sub_key = (resource.resource_type,)
         else:
@@ -217,18 +219,9 @@ def group_resources_hierarchically(
             
             if not grouped_by:
                 sub_key = (resource.resource_type,)
-            elif len(grouped_by) > 1:
-                # Use remaining grouping values for sub-grouping
-                # (first value was already used for outer group)
-                sub_key_parts = []
-                for field in grouped_by[1:]:
-                    value = resource.get_value(field)
-                    # Normalize to lowercase
-                    sub_key_parts.append(str(value).lower() if value is not None else 'unknown')
-                sub_key = tuple(sub_key_parts)
             else:
-                # Only one grouping field - use 'resources' marker to avoid extra sub-cluster
-                # This places resources directly in the outer cluster without an intermediate layer
+                # Use 'resources' marker for all resources with grouping configuration
+                # This prevents sub-clustering and places resources directly in the outer cluster
                 sub_key = (RESOURCES_SUBGROUP_KEY,)
         
         # Initialize nested structure
