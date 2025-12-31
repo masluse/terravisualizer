@@ -24,6 +24,12 @@ MIN_TEXT_CELL_WIDTH = 200  # Minimum width of text cell for uniform box sizes
 CHAR_WIDTH_LARGE_FONT = 10  # Estimated width per character for 16pt bold font
 CHAR_WIDTH_SMALL_FONT = 7   # Estimated width per character for 11pt font
 
+# Constants for grouping
+RESOURCES_SUBGROUP_KEY = 'resources'  # Key for direct resource placement without sub-clustering
+
+# Constants for layout
+OUTER_CLUSTER_STACK_WEIGHT = '5'  # Weight for invisible edges between outer clusters (vertical stacking)
+
 
 def extract_grouping_hierarchy(
     resources: List[Resource],
@@ -112,7 +118,8 @@ def group_resources_hierarchically(
             id_value = resource.get_value(id_field)
             
             # If id_value is None or empty, use resource address as fallback
-            # Note: In practice, Terraform plan JSON always provides id values when defined
+            # Note: Terraform plan JSON typically provides id values when defined in the config,
+            # but we use resource.address as a safe fallback to ensure unique identification
             if not id_value:
                 id_value = resource.address
             
@@ -220,9 +227,9 @@ def group_resources_hierarchically(
                     sub_key_parts.append(str(value).lower() if value is not None else 'unknown')
                 sub_key = tuple(sub_key_parts)
             else:
-                # Only one grouping field - use resource type for sub-grouping
-                # This ensures proper separation of different resource types
-                sub_key = (resource.resource_type,)
+                # Only one grouping field - use 'resources' marker to avoid extra sub-cluster
+                # This places resources directly in the outer cluster without an intermediate layer
+                sub_key = (RESOURCES_SUBGROUP_KEY,)
         
         # Initialize nested structure
         if outer_key not in outer_groups:
@@ -465,11 +472,11 @@ def generate_diagram(
                 outer_cluster.attr(margin='25')  # Reduced margin for tighter spacing
                 
                 # Check if we need sub-clusters or can place resources directly
-                has_only_resources_key = len(sub_groups) == 1 and ('resources',) in sub_groups
+                has_only_resources_key = len(sub_groups) == 1 and (RESOURCES_SUBGROUP_KEY,) in sub_groups
                 
                 # Check if 'resources' sub-group exists and should be merged into outer cluster
-                resources_subgroup = sub_groups.get(('resources',), [])
-                other_subgroups = {k: v for k, v in sub_groups.items() if k != ('resources',)}
+                resources_subgroup = sub_groups.get((RESOURCES_SUBGROUP_KEY,), [])
+                other_subgroups = {k: v for k, v in sub_groups.items() if k != (RESOURCES_SUBGROUP_KEY,)}
                 
                 # If we only have a 'resources' group, place directly in outer cluster
                 if has_only_resources_key:
@@ -546,8 +553,8 @@ def generate_diagram(
                         outer_cluster_anchor_nodes.append(parent_cluster_first_nodes[0])
                 else:
                     # Create sub-clusters within the outer cluster
-                    resources_subgroup = sub_groups.get(('resources',), [])
-                    other_subgroups = {k: v for k, v in sub_groups.items() if k != ('resources',)}
+                    resources_subgroup = sub_groups.get((RESOURCES_SUBGROUP_KEY,), [])
+                    other_subgroups = {k: v for k, v in sub_groups.items() if k != (RESOURCES_SUBGROUP_KEY,)}
                     
                     # Track anchor nodes from sub-clusters for grid layout
                     sub_cluster_anchor_nodes: List[str] = []
@@ -701,7 +708,7 @@ def generate_diagram(
         if len(outer_cluster_anchor_nodes) > 1:
             for i in range(len(outer_cluster_anchor_nodes) - 1):
                 container.edge(outer_cluster_anchor_nodes[i], outer_cluster_anchor_nodes[i + 1],
-                             style='invis', weight='5')
+                             style='invis', weight=OUTER_CLUSTER_STACK_WEIGHT)
     
     # Remove extension from output_path if present
     output_base = str(Path(output_path).with_suffix(''))
@@ -1103,7 +1110,7 @@ def _format_sub_group_label(sub_key: Tuple[str, ...]) -> str:
         if ':' in part:
             return _shorten_path_name(part.split(':', 1)[1])
         # If it's just 'resources', don't show a label
-        elif part == 'resources':
+        elif part == RESOURCES_SUBGROUP_KEY:
             return ''
         else:
             return _shorten_path_name(part)
