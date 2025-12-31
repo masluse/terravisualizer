@@ -398,8 +398,11 @@ def _render_nested_groups(
     
     for group_key, group_content in sorted_items:
         # Check if this level has any content (resources or nested groups)
-        has_resources = (RESOURCES_SUBGROUP_KEY,) in group_content if isinstance(group_content, dict) else False
-        has_nested_groups = isinstance(group_content, dict) and any(k != (RESOURCES_SUBGROUP_KEY,) for k in group_content.keys())
+        if not isinstance(group_content, dict):
+            continue
+            
+        has_resources = (RESOURCES_SUBGROUP_KEY,) in group_content
+        has_nested_groups = any(k != (RESOURCES_SUBGROUP_KEY,) for k in group_content.keys())
         
         # Create a cluster for this group
         cluster_name = f'cluster_{abs(hash(tuple(path_stack + [group_key[0]])))}'
