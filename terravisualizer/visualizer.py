@@ -204,10 +204,12 @@ def group_resources_hierarchically(
             if not grouped_by:
                 outer_key = ('default',)
             else:
-                # Use only the first grouping field for the outer group (lowercase)
-                first_field = grouped_by[0]
-                first_value = resource.get_value(first_field)
-                outer_key = (str(first_value).lower() if first_value is not None else 'unknown',)
+                # Use the LAST grouping field for the outer group (most specific grouping)
+                # For resources with multiple fields, this groups by the most granular level
+                # e.g., [values.project, values.region] -> groups by region
+                last_field = grouped_by[-1]
+                last_value = resource.get_value(last_field)
+                outer_key = (str(last_value).lower() if last_value is not None else 'unknown',)
         
         # Build sub-group key
         # Always use 'resources' marker to place all resources directly in outer cluster
