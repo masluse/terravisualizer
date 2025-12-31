@@ -83,7 +83,7 @@
 
 "google_service_account_iam_member" {
     "group_id" = "values.service_account_id"
-    "grouped_by" = ["values.member"]
+    "grouped_by" = [values.member]
     "diagram_image" = "icons/google_compute_address.png"
     "name" = "${values.role}"
 }
