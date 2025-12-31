@@ -397,36 +397,42 @@ def _render_nested_groups(
     sorted_items = sorted(nested_dict.items(), key=sort_key)
     
     for group_key, group_content in sorted_items:
-        # Check if this is a leaf (contains resources) or a branch (contains nested groups)
-        is_leaf = (RESOURCES_SUBGROUP_KEY,) in group_content if isinstance(group_content, dict) else False
+        # Check if this level has any content (resources or nested groups)
+        if not isinstance(group_content, dict):
+            continue
+            
+        has_resources = (RESOURCES_SUBGROUP_KEY,) in group_content
+        has_nested_groups = any(k != (RESOURCES_SUBGROUP_KEY,) for k in group_content.keys())
         
-        if is_leaf:
-            # This level contains resources - render them
-            resources_list = group_content[(RESOURCES_SUBGROUP_KEY,)]
-            
-            # Create a cluster for this group
-            cluster_name = f'cluster_{abs(hash(tuple(path_stack + [group_key[0]])))}'
-            
-            with parent_graph.subgraph(name=cluster_name) as cluster:
-                # Format label based on depth
-                if depth == 1:
-                    # Top level - use outer group formatting
-                    label = _format_outer_group_label(group_key)
-                    cluster.attr(label=label, fontsize='22', fontname='DejaVu Sans Bold', labeljust='l')
+        # Create a cluster for this group
+        cluster_name = f'cluster_{abs(hash(tuple(path_stack + [group_key[0]])))}'
+        
+        with parent_graph.subgraph(name=cluster_name) as cluster:
+            # Format label based on depth
+            if depth == 1:
+                # Top level - use outer group formatting
+                label = _format_outer_group_label(group_key)
+                cluster.attr(label=label, fontsize='22', fontname='DejaVu Sans Bold', labeljust='l')
+            else:
+                # Nested level - use sub-group formatting
+                label = _format_sub_group_label(group_key)
+                if label:
+                    cluster.attr(label=label, fontsize='16', fontname='DejaVu Sans Bold', labeljust='l')
                 else:
-                    # Nested level - use sub-group formatting
-                    label = _format_sub_group_label(group_key)
-                    if label:
-                        cluster.attr(label=label, fontsize='16', fontname='DejaVu Sans Bold', labeljust='l')
-                    else:
-                        cluster.attr(label='', fontsize='14', labeljust='l')
+                    cluster.attr(label='', fontsize='14', labeljust='l')
+            
+            # Gray styling based on depth
+            gray_color = _get_gray_color(depth)
+            cluster.attr(style='filled,rounded', color='#a0a0a0', fillcolor=gray_color, penwidth='2.0')
+            cluster.attr(margin='25')
+            
+            # Track anchor nodes for this cluster (both direct resources and nested groups)
+            cluster_anchor_nodes = []
+            
+            # First, render any direct resources at this level
+            if has_resources:
+                resources_list = group_content[(RESOURCES_SUBGROUP_KEY,)]
                 
-                # Gray styling based on depth
-                gray_color = _get_gray_color(depth)
-                cluster.attr(style='filled,rounded', color='#a0a0a0', fillcolor=gray_color, penwidth='2.0')
-                cluster.attr(margin='25')
-                
-                # Render resources in this group
                 local_node_ids = []
                 local_node_types = {}
                 parent_cluster_first_nodes = []
@@ -479,44 +485,32 @@ def _render_nested_groups(
                 # Layout nodes by type
                 if local_node_ids:
                     _layout_nodes_by_type(cluster, local_node_ids, local_node_types)
-                    anchor_nodes.append(local_node_ids[0])
+                    cluster_anchor_nodes.append(local_node_ids[0])
                 elif parent_cluster_first_nodes:
-                    anchor_nodes.append(parent_cluster_first_nodes[0])
-        else:
-            # This level contains nested groups - recurse
-            cluster_name = f'cluster_{abs(hash(tuple(path_stack + [group_key[0]])))}'
+                    cluster_anchor_nodes.append(parent_cluster_first_nodes[0])
             
-            with parent_graph.subgraph(name=cluster_name) as cluster:
-                # Format label based on depth
-                if depth == 1:
-                    label = _format_outer_group_label(group_key)
-                    cluster.attr(label=label, fontsize='22', fontname='DejaVu Sans Bold', labeljust='l')
-                else:
-                    label = _format_sub_group_label(group_key)
-                    if label:
-                        cluster.attr(label=label, fontsize='16', fontname='DejaVu Sans Bold', labeljust='l')
-                    else:
-                        cluster.attr(label='', fontsize='14', labeljust='l')
-                
-                # Gray styling based on depth
-                gray_color = _get_gray_color(depth)
-                cluster.attr(style='filled,rounded', color='#a0a0a0', fillcolor=gray_color, penwidth='2.0')
-                cluster.attr(margin='25')
+            # Then, recursively render any nested groups
+            if has_nested_groups:
+                # Get only the nested group keys (exclude 'resources' key)
+                nested_group_dict = {k: v for k, v in group_content.items() if k != (RESOURCES_SUBGROUP_KEY,)}
                 
                 # Recursively render nested groups
                 new_path_stack = path_stack + [group_key[0]]
                 node_counter, nested_anchors = _render_nested_groups(
-                    cluster, group_content, config, node_ids, node_counter,
+                    cluster, nested_group_dict, config, node_ids, node_counter,
                     max_widths_per_type, parent_to_children, depth + 1, new_path_stack
                 )
                 
-                # Stack nested groups vertically
-                if len(nested_anchors) > 1:
-                    for i in range(len(nested_anchors) - 1):
-                        cluster.edge(nested_anchors[i], nested_anchors[i + 1], style='invis', weight='10')
-                
                 if nested_anchors:
-                    anchor_nodes.append(nested_anchors[0])
+                    cluster_anchor_nodes.extend(nested_anchors)
+            
+            # Stack all anchor nodes in this cluster vertically
+            if len(cluster_anchor_nodes) > 1:
+                for i in range(len(cluster_anchor_nodes) - 1):
+                    cluster.edge(cluster_anchor_nodes[i], cluster_anchor_nodes[i + 1], style='invis', weight='10')
+            
+            if cluster_anchor_nodes:
+                anchor_nodes.append(cluster_anchor_nodes[0])
     
     return node_counter, anchor_nodes
 
@@ -763,7 +757,8 @@ def _render_grouped_children(
                     parent_graph.node(child_node_id, label=child_label)
             else:
                 # Create a sub-cluster for this group
-                sub_cluster_name = f'cluster_grouped_{abs(hash(group_key))}'
+                # Use node_counter to ensure uniqueness across different parent contexts
+                sub_cluster_name = f'cluster_grouped_{abs(hash(group_key))}_{node_counter}'
                 
                 with parent_graph.subgraph(name=sub_cluster_name) as sub_cluster:
                     # Format the group label nicely with bold styling
