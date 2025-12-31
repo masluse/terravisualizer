@@ -24,6 +24,12 @@ MIN_TEXT_CELL_WIDTH = 200  # Minimum width of text cell for uniform box sizes
 CHAR_WIDTH_LARGE_FONT = 10  # Estimated width per character for 16pt bold font
 CHAR_WIDTH_SMALL_FONT = 7   # Estimated width per character for 11pt font
 
+# Constants for grouping
+RESOURCES_SUBGROUP_KEY = 'resources'  # Key for direct resource placement without sub-clustering
+
+# Constants for layout
+OUTER_CLUSTER_STACK_WEIGHT = '5'  # Weight for invisible edges between outer clusters (vertical stacking)
+
 
 def extract_grouping_hierarchy(
     resources: List[Resource],
@@ -111,19 +117,11 @@ def group_resources_hierarchically(
             id_field = resource_config['id']
             id_value = resource.get_value(id_field)
             
-            # If id_value is None or empty, try to construct a fallback ID
-            if id_value is None or id_value == '':
-                # For google_service_account, try to construct from account_id and project
-                if resource.resource_type == 'google_service_account':
-                    account_id = resource.get_value('values.account_id')
-                    project = resource.get_value('values.project')
-                    if account_id and project:
-                        # Construct the service account email format
-                        id_value = f"{account_id}@{project}.iam.gserviceaccount.com"
-                
-                # If still no ID, use a fallback based on resource address (unique)
-                if not id_value:
-                    id_value = resource.address
+            # If id_value is None or empty, use resource address as fallback
+            # Note: Terraform plan JSON typically provides id values when defined in the config,
+            # but we use resource.address as a safe fallback to ensure unique identification
+            if not id_value:
+                id_value = resource.address
             
             if id_value:
                 # Use resource.address as the unique key (entire path)
@@ -206,12 +204,16 @@ def group_resources_hierarchically(
             if not grouped_by:
                 outer_key = ('default',)
             else:
-                # Use only the first grouping field for the outer group (lowercase)
-                first_field = grouped_by[0]
-                first_value = resource.get_value(first_field)
-                outer_key = (str(first_value).lower() if first_value is not None else 'unknown',)
+                # Use the LAST grouping field for the outer group (most specific grouping)
+                # For resources with multiple fields, this groups by the most granular level
+                # e.g., [values.project, values.region] -> groups by region
+                last_field = grouped_by[-1]
+                last_value = resource.get_value(last_field)
+                outer_key = (str(last_value).lower() if last_value is not None else 'unknown',)
         
         # Build sub-group key
+        # Always use 'resources' marker to place all resources directly in outer cluster
+        # without creating intermediate sub-clusters, regardless of number of grouping fields
         if not resource_config or 'grouped_by' not in resource_config:
             sub_key = (resource.resource_type,)
         else:
@@ -219,19 +221,10 @@ def group_resources_hierarchically(
             
             if not grouped_by:
                 sub_key = (resource.resource_type,)
-            elif len(grouped_by) > 1:
-                # Use remaining grouping values for sub-grouping
-                # (first value was already used for outer group)
-                sub_key_parts = []
-                for field in grouped_by[1:]:
-                    value = resource.get_value(field)
-                    # Normalize to lowercase
-                    sub_key_parts.append(str(value).lower() if value is not None else 'unknown')
-                sub_key = tuple(sub_key_parts)
             else:
-                # Only one grouping field - use resource type for sub-grouping
-                # This ensures proper separation of different resource types
-                sub_key = (resource.resource_type,)
+                # Use 'resources' marker for all resources with grouping configuration
+                # This prevents sub-clustering and places resources directly in the outer cluster
+                sub_key = (RESOURCES_SUBGROUP_KEY,)
         
         # Initialize nested structure
         if outer_key not in outer_groups:
@@ -456,6 +449,9 @@ def generate_diagram(
         # Nesting depth for gray transparency calculation
         depth = 0
         
+        # Track anchor nodes from each outer cluster for vertical stacking
+        outer_cluster_anchor_nodes: List[str] = []
+        
         # Create outer clusters for each top-level group
         for outer_key, sub_groups in sorted_groups:
             outer_cluster_name = f'cluster_outer_{abs(hash(outer_key))}'
@@ -471,11 +467,11 @@ def generate_diagram(
                 outer_cluster.attr(margin='25')  # Reduced margin for tighter spacing
                 
                 # Check if we need sub-clusters or can place resources directly
-                has_only_resources_key = len(sub_groups) == 1 and ('resources',) in sub_groups
+                has_only_resources_key = len(sub_groups) == 1 and (RESOURCES_SUBGROUP_KEY,) in sub_groups
                 
                 # Check if 'resources' sub-group exists and should be merged into outer cluster
-                resources_subgroup = sub_groups.get(('resources',), [])
-                other_subgroups = {k: v for k, v in sub_groups.items() if k != ('resources',)}
+                resources_subgroup = sub_groups.get((RESOURCES_SUBGROUP_KEY,), [])
+                other_subgroups = {k: v for k, v in sub_groups.items() if k != (RESOURCES_SUBGROUP_KEY,)}
                 
                 # If we only have a 'resources' group, place directly in outer cluster
                 if has_only_resources_key:
@@ -488,6 +484,7 @@ def generate_diagram(
                     sub_key, resources_in_group = list(sub_groups.items())[0]
                     sub_node_ids: List[str] = []
                     sub_node_types: Dict[str, str] = {}  # Track node types for layout
+                    parent_cluster_first_nodes: List[str] = []  # Track first nodes from parent clusters
                     
                     for resource in resources_in_group:
                         # Use resource.address as the unique key
@@ -523,6 +520,7 @@ def generate_diagram(
                                 # Layout children by type (same type vertical, different types horizontal)
                                 if child_node_ids:
                                     _layout_nodes_by_type(parent_cluster, child_node_ids, child_node_types)
+                                    parent_cluster_first_nodes.append(child_node_ids[0])
                         else:
                             # Regular node without children
                             node_id = f'node_{node_counter}'
@@ -543,10 +541,15 @@ def generate_diagram(
                     # Layout nodes by type (same type vertical, different types horizontal)
                     if sub_node_ids:
                         _layout_nodes_by_type(outer_cluster, sub_node_ids, sub_node_types)
+                        # Track first node for outer cluster anchor
+                        outer_cluster_anchor_nodes.append(sub_node_ids[0])
+                    elif parent_cluster_first_nodes:
+                        # Track first parent cluster node for outer cluster anchor
+                        outer_cluster_anchor_nodes.append(parent_cluster_first_nodes[0])
                 else:
                     # Create sub-clusters within the outer cluster
-                    resources_subgroup = sub_groups.get(('resources',), [])
-                    other_subgroups = {k: v for k, v in sub_groups.items() if k != ('resources',)}
+                    resources_subgroup = sub_groups.get((RESOURCES_SUBGROUP_KEY,), [])
+                    other_subgroups = {k: v for k, v in sub_groups.items() if k != (RESOURCES_SUBGROUP_KEY,)}
                     
                     # Track anchor nodes from sub-clusters for grid layout
                     sub_cluster_anchor_nodes: List[str] = []
@@ -691,6 +694,16 @@ def generate_diagram(
                     
                     # Apply grid layout to sub-clusters using anchor nodes (groups side by side)
                     _layout_group_anchors(outer_cluster, sub_cluster_anchor_nodes)
+                    
+                    # Track first anchor node for outer cluster vertical stacking
+                    if sub_cluster_anchor_nodes:
+                        outer_cluster_anchor_nodes.append(sub_cluster_anchor_nodes[0])
+        
+        # Add invisible edges to force outer clusters to stack vertically
+        if len(outer_cluster_anchor_nodes) > 1:
+            for i in range(len(outer_cluster_anchor_nodes) - 1):
+                container.edge(outer_cluster_anchor_nodes[i], outer_cluster_anchor_nodes[i + 1],
+                             style='invis', weight=OUTER_CLUSTER_STACK_WEIGHT)
     
     # Remove extension from output_path if present
     output_base = str(Path(output_path).with_suffix(''))
@@ -1092,7 +1105,7 @@ def _format_sub_group_label(sub_key: Tuple[str, ...]) -> str:
         if ':' in part:
             return _shorten_path_name(part.split(':', 1)[1])
         # If it's just 'resources', don't show a label
-        elif part == 'resources':
+        elif part == RESOURCES_SUBGROUP_KEY:
             return ''
         else:
             return _shorten_path_name(part)
