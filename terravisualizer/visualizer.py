@@ -102,7 +102,8 @@ def group_resources_hierarchically(
     hierarchy = extract_grouping_hierarchy(resources, config)
     
     # First pass: identify resources that can be parents (have 'id' defined)
-    parent_resources = {}  # Maps (resource_type, id_value) -> resource
+    # Use resource.address as the unique key for script perspective
+    parent_resources = {}  # Maps resource.address -> (id_value, resource)
     parent_map = {}  # Maps parent resource key -> resource object
     for resource in resources:
         resource_config = get_resource_config(config, resource.resource_type)
@@ -125,18 +126,10 @@ def group_resources_hierarchically(
                     id_value = resource.address
             
             if id_value:
-                id_str = str(id_value)
-                # Check if this ID already exists for this resource type
-                key = (resource.resource_type, id_str)
-                if key in parent_resources:
-                    # ID collision! Use resource address for uniqueness
-                    # This ensures each resource gets a truly unique identifier
-                    id_str = f"{id_str}|||{resource.address}"
-                    key = (resource.resource_type, id_str)
-                
-                parent_resources[key] = resource
-                parent_key = f"{resource.resource_type}.{resource.name}"
-                parent_map[parent_key] = resource
+                # Use resource.address as the unique key (entire path)
+                # Store both the id_value (for HCL matching) and the resource
+                parent_resources[resource.address] = (str(id_value), resource)
+                parent_map[resource.address] = resource
     
     # Second pass: identify parent-child relationships
     resource_to_parent = {}  # Maps child resource -> parent resource
@@ -157,38 +150,37 @@ def group_resources_hierarchically(
                 parent_id_str = str(parent_id)
                 matched_parent = None
                 
-                for (parent_type, parent_id_val), potential_parent in parent_resources.items():
+                # Iterate through parent_resources using new structure: address -> (id_value, resource)
+                for parent_address, (parent_id_val, potential_parent) in parent_resources.items():
                     # Skip if the potential parent is of the same type as the child
                     # (resources shouldn't be nested inside resources of the same type)
-                    if parent_type == resource.resource_type:
+                    if potential_parent.resource_type == resource.resource_type:
                         continue
                     
-                    # Remove collision suffix if present (format: "id|||name")
-                    parent_id_clean = parent_id_val.split('|||')[0] if '|||' in parent_id_val else parent_id_val
-                    
                     # Try exact match first (case-sensitive)
-                    if parent_id_str == parent_id_clean:
+                    if parent_id_str == parent_id_val:
                         matched_parent = potential_parent
                         break
                     
                     # For google_service_account, try matching with constructed email
-                    if parent_type == 'google_service_account' and not matched_parent:
+                    if potential_parent.resource_type == 'google_service_account' and not matched_parent:
                         # Check if child's service_account_id matches constructed format
-                        if '@' in parent_id_str and '@' in parent_id_clean:
+                        if '@' in parent_id_str and '@' in parent_id_val:
                             # Both have email format, try matching email part
                             child_email = parent_id_str
-                            parent_email = parent_id_clean
+                            parent_email = parent_id_val
                             if child_email.lower() == parent_email.lower():
                                 matched_parent = potential_parent
                                 break
                     # Fallback to case-insensitive match
-                    if parent_id_str.lower() == parent_id_clean.lower():
+                    if parent_id_str.lower() == parent_id_val.lower():
                         matched_parent = potential_parent
                         break
                 
                 if matched_parent:
                     resource_to_parent[resource] = matched_parent
-                    parent_key = f"{matched_parent.resource_type}.{matched_parent.name}"
+                    # Use resource.address as the key for parent_to_children map
+                    parent_key = matched_parent.address
                     if parent_key not in parent_to_children:
                         parent_to_children[parent_key] = []
                     parent_to_children[parent_key].append(resource)
@@ -422,13 +414,12 @@ def generate_diagram(
     
     # Title at top-left, timestamp at top-right
     # GraphViz only supports one graph label, so we combine them in a table
-    # Using labeljust='l' positions the table at the left, but we make the table wide enough
-    # to span across and right-align the timestamp within it
+    # Using percentage-based widths for better scaling with large diagrams
     header_label = f'''<
-<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="0" WIDTH="1500">
+<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="8">
   <TR>
-    <TD ALIGN="LEFT" WIDTH="300"><B><FONT POINT-SIZE="24" COLOR="#1f2937">{title}</FONT></B></TD>
-    <TD ALIGN="RIGHT" WIDTH="1200"><FONT POINT-SIZE="14" COLOR="#6b7280">{timestamp}</FONT></TD>
+    <TD ALIGN="LEFT"><B><FONT POINT-SIZE="24" COLOR="#1f2937">{title}</FONT></B></TD>
+    <TD ALIGN="RIGHT"><FONT POINT-SIZE="14" COLOR="#6b7280">{timestamp}</FONT></TD>
   </TR>
 </TABLE>>'''
     dot.attr(label=header_label, labelloc='t', labeljust='l')
@@ -498,7 +489,8 @@ def generate_diagram(
                     sub_node_types: Dict[str, str] = {}  # Track node types for layout
                     
                     for resource in resources_in_group:
-                        parent_key = f"{resource.resource_type}.{resource.name}"
+                        # Use resource.address as the unique key
+                        parent_key = resource.address
                         
                         # Check if this resource has children
                         if parent_key in parent_to_children:
@@ -534,7 +526,8 @@ def generate_diagram(
                             # Regular node without children
                             node_id = f'node_{node_counter}'
                             node_counter += 1
-                            node_ids[f'{resource.resource_type}.{resource.name}'] = node_id
+                            # Use resource.address as the unique key
+                            node_ids[resource.address] = node_id
                             sub_node_ids.append(node_id)
                             sub_node_types[node_id] = resource.resource_type  # Track type
                             
@@ -561,7 +554,8 @@ def generate_diagram(
                     direct_node_ids: List[str] = []
                     direct_node_types: Dict[str, str] = {}  # Track node types
                     for resource in resources_subgroup:
-                        parent_key = f"{resource.resource_type}.{resource.name}"
+                        # Use resource.address as the unique key
+                        parent_key = resource.address
                         
                         if parent_key in parent_to_children:
                             # Create parent cluster directly in outer cluster
@@ -593,7 +587,8 @@ def generate_diagram(
                             # Regular node without children - place directly in outer cluster
                             node_id = f'node_{node_counter}'
                             node_counter += 1
-                            node_ids[f'{resource.resource_type}.{resource.name}'] = node_id
+                            # Use resource.address as the unique key
+                            node_ids[resource.address] = node_id
                             direct_node_ids.append(node_id)
                             direct_node_types[node_id] = resource.resource_type
                             
@@ -635,7 +630,8 @@ def generate_diagram(
                             parent_cluster_nodes: List[str] = []  # Track nodes from parent clusters
                             
                             for resource in resources_in_group:
-                                parent_key = f"{resource.resource_type}.{resource.name}"
+                                # Use resource.address as the unique key
+                                parent_key = resource.address
                                 
                                 # Check if this resource has children
                                 if parent_key in parent_to_children:
@@ -670,7 +666,8 @@ def generate_diagram(
                                     # Regular node without children
                                     node_id = f'node_{node_counter}'
                                     node_counter += 1
-                                    node_ids[f'{resource.resource_type}.{resource.name}'] = node_id
+                                    # Use resource.address as the unique key
+                                    node_ids[resource.address] = node_id
                                     sub_node_ids.append(node_id)
                                     sub_node_types[node_id] = resource.resource_type
                                     
@@ -792,7 +789,8 @@ def _render_grouped_children(
         for child in children:
             child_node_id = f'node_{node_counter}'
             node_counter += 1
-            node_ids[f'{child.resource_type}.{child.name}'] = child_node_id
+            # Use resource.address as the unique key
+            node_ids[child.address] = child_node_id
             all_child_node_ids.append(child_node_id)
             if node_types is not None:
                 node_types[child_node_id] = child.resource_type
@@ -819,7 +817,8 @@ def _render_grouped_children(
                 for child in children:
                     child_node_id = f'node_{node_counter}'
                     node_counter += 1
-                    node_ids[f'{child.resource_type}.{child.name}'] = child_node_id
+                    # Use resource.address as the unique key
+                    node_ids[child.address] = child_node_id
                     all_child_node_ids.append(child_node_id)
                     if node_types is not None:
                         node_types[child_node_id] = child.resource_type
@@ -858,7 +857,8 @@ def _render_grouped_children(
                     for child in children:
                         child_node_id = f'node_{node_counter}'
                         node_counter += 1
-                        node_ids[f'{child.resource_type}.{child.name}'] = child_node_id
+                        # Use resource.address as the unique key
+                        node_ids[child.address] = child_node_id
                         group_node_ids.append(child_node_id)
                         all_child_node_ids.append(child_node_id)
                         if node_types is not None:
