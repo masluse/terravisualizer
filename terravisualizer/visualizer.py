@@ -636,6 +636,7 @@ def generate_diagram(
     dot.attr(compound='true')
     dot.attr(concentrate='false')
     dot.attr(newrank='true')
+    dot.attr(ordering='out')  # Respect edge order for left-to-right layout
     dot.attr(nodesep='0.4')   # Horizontal spacing between nodes
     dot.attr(ranksep='0.15')  # Vertical spacing between ranks (smaller for tighter stacking)
     dot.attr(pad='0.3')       # Reduced padding around the graph (space to image border)
