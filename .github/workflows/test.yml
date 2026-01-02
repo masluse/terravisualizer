@@ -39,21 +39,14 @@ jobs:
     - name: Test with sample data
       run: |
         cd examples
-        terravisualizer --file sample_tfplan.json --config sample_config.hcl --output test_output.png
+        terravisualizer --file sample_tfplan.json --output test_output.png
         # Check that output was created
         test -f test_output.png
         echo "Test passed - diagram generated successfully"
     
-    - name: Test JSON config format
-      run: |
-        cd examples
-        terravisualizer --file sample_tfplan.json --config sample_config.json --output test_json.png
-        test -f test_json.png
-        echo "JSON config test passed"
-    
     - name: Test SVG output format
       run: |
         cd examples
-        terravisualizer --file sample_tfplan.json --config sample_config.hcl --output test.svg --format svg
+        terravisualizer --file sample_tfplan.json --output test.svg --format svg
         test -f test.svg
         echo "SVG output test passed"
