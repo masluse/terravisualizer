@@ -354,33 +354,6 @@ def _layout_group_anchors(outer_cluster: Digraph, anchor_node_ids: List[str]) ->
     _layout_nodes_in_grid(outer_cluster, anchor_node_ids, max_cols=3)
 
 
-def _should_layout_horizontally(grouping_fields_list: List[Optional[List[str]]]) -> bool:
-    """
-    Determine if groups should be laid out horizontally based on their grouping field names.
-    Groups with the same grouping field names should stack vertically.
-    Groups with different grouping field names should be placed horizontally.
-    
-    Args:
-        grouping_fields_list: List of grouping field lists for each group
-        
-    Returns:
-        True if groups should be laid out horizontally, False for vertical
-    """
-    # Filter out None values
-    valid_fields = [f for f in grouping_fields_list if f is not None and len(f) > 0]
-    
-    if len(valid_fields) <= 1:
-        # Only one group with valid fields or all None - doesn't matter, use vertical
-        return False
-    
-    # Check if all grouping fields are the same
-    first_fields = valid_fields[0]
-    all_same = all(f == first_fields for f in valid_fields)
-    
-    # If all same → vertical, if different → horizontal
-    return not all_same
-
-
 def _render_nested_groups(
     parent_graph,
     nested_dict: Dict[Tuple[str, ...], Any],
@@ -392,7 +365,7 @@ def _render_nested_groups(
     depth: int = 1,
     path_stack: List[str] = None,
     grouping_field_names: Optional[List[str]] = None
-) -> Tuple[int, List[str], Optional[List[str]]]:
+) -> Tuple[int, List[str], List[Optional[str]]]:
     """
     Recursively render nested groups of resources.
     
@@ -416,7 +389,7 @@ def _render_nested_groups(
     
     anchor_nodes = []
     # Track grouping field names for each anchor to determine layout
-    anchor_grouping_fields = []
+    anchor_grouping_fields: List[Optional[str]] = []
     
     # Sort groups: ungrouped last (far right), then alphabetically
     def sort_key(item):
@@ -444,7 +417,8 @@ def _render_nested_groups(
                     grouped_by = resource_config['grouped_by']
                     if grouped_by:
                         # Get the field name at the next depth level (safely handles out of bounds)
-                        group_grouping_fields = grouped_by[depth:depth+1] if len(grouped_by) > depth else []
+                        level_idx = depth - 1
+                        group_grouping_fields = grouped_by[level_idx] if level_idx < len(grouped_by) else None
             
         has_resources = (RESOURCES_SUBGROUP_KEY,) in group_content
         has_nested_groups = any(k != (RESOURCES_SUBGROUP_KEY,) for k in group_content.keys())
@@ -453,138 +427,153 @@ def _render_nested_groups(
         cluster_name = f'cluster_{abs(hash(tuple(path_stack + [group_key[0]])))}'
         
         with parent_graph.subgraph(name=cluster_name) as cluster:
-            # Format label based on depth
+            # ----------------------------
+            # Cluster label (unchanged)
+            # ----------------------------
             if depth == 1:
-                # Top level - use outer group formatting
                 label = _format_outer_group_label(group_key)
                 cluster.attr(label=label, fontsize='22', fontname='DejaVu Sans Bold', labeljust='l')
             else:
-                # Nested level - use sub-group formatting
                 label = _format_sub_group_label(group_key)
                 if label:
                     cluster.attr(label=label, fontsize='16', fontname='DejaVu Sans Bold', labeljust='l')
                 else:
                     cluster.attr(label='', fontsize='14', labeljust='l')
-            
-            # Gray styling based on depth
+
+            # ----------------------------
+            # Cluster styling (unchanged)
+            # ----------------------------
             gray_color = _get_gray_color(depth)
             cluster.attr(style='filled,rounded', color='#a0a0a0', fillcolor=gray_color, penwidth='2.0')
             cluster.attr(margin='25')
-            
-            # Track anchor nodes for this cluster (both direct resources and nested groups)
-            cluster_anchor_nodes = []
-            
-            # First, render any direct resources at this level
-            if has_resources:
-                resources_list = group_content[(RESOURCES_SUBGROUP_KEY,)]
-                
-                local_node_ids = []
-                local_node_types = {}
-                parent_cluster_first_nodes = []
-                
-                for resource in resources_list:
-                    parent_key = resource.address
-                    
-                    # Check if this resource has children
-                    if parent_key in parent_to_children:
-                        # Create a sub-cluster for this parent and its children
-                        parent_cluster_name = f'cluster_parent_{abs(hash(parent_key))}'
-                        
-                        with cluster.subgraph(name=parent_cluster_name) as parent_cluster:
-                            resource_config = get_resource_config(config, resource.resource_type)
-                            display_name = get_display_name(resource, resource_config)
-                            _apply_parent_cluster_style(parent_cluster, display_name, depth=depth+1)
-                            
-                            # Group children by grouped_by if configured
-                            children = parent_to_children[parent_key]
-                            grouped_children = _group_children_by_config(children, config)
-                            
-                            child_node_ids = []
-                            child_node_types = {}
-                            node_counter = _render_grouped_children(
-                                parent_cluster, grouped_children, config,
-                                node_ids, child_node_ids, node_counter,
-                                max_widths_per_type, depth=depth+2,
-                                node_types=child_node_types
-                            )
-                            
-                            if child_node_ids:
-                                _layout_nodes_by_type(parent_cluster, child_node_ids, child_node_types)
-                                parent_cluster_first_nodes.append(child_node_ids[0])
-                    else:
-                        # Regular node without children
-                        node_id = f'node_{node_counter}'
-                        node_counter += 1
-                        node_ids[resource.address] = node_id
-                        local_node_ids.append(node_id)
-                        local_node_types[node_id] = resource.resource_type
-                        
-                        resource_config = get_resource_config(config, resource.resource_type)
-                        display_name = get_display_name(resource, resource_config)
-                        icon_path = resource_config.get('diagram_image', '')
-                        
-                        text_width = max_widths_per_type.get(resource.resource_type)
-                        label = _create_node_label(resource.resource_type, display_name, icon_path, text_width)
-                        cluster.node(node_id, label=label)
-                
-                # Layout nodes by type
-                if local_node_ids:
-                    _layout_nodes_by_type(cluster, local_node_ids, local_node_types)
-                    cluster_anchor_nodes.append(local_node_ids[0])
-                elif parent_cluster_first_nodes:
-                    cluster_anchor_nodes.append(parent_cluster_first_nodes[0])
-            
-            # Then, recursively render any nested groups
-            nested_grouping_fields = None  # Initialize to avoid undefined variable
+
+            # ============================================================
+            # NEW: separate anchors for nested-groups vs direct resources
+            # ============================================================
+            nested_anchor_nodes: List[str] = []                 # anchors from sub-clusters (L2+ groups)
+            direct_resource_anchor: Optional[str] = None        # first direct resource node (or first parent-cluster child node)
+
+            # For direct resource layout
+            local_node_ids: List[str] = []
+            local_node_types: Dict[str, str] = {}
+            parent_cluster_first_nodes: List[str] = []
+
+            # ------------------------------------------------------------
+            # 1) Render nested groups FIRST (so they stay "above")
+            # ------------------------------------------------------------
+            # (We also keep the returned anchors so we can align them later.)
+            nested_grouping_fields = None  # kept for compatibility with your current signature
             if has_nested_groups:
-                # Get only the nested group keys (exclude 'resources' key)
                 nested_group_dict = {k: v for k, v in group_content.items() if k != (RESOURCES_SUBGROUP_KEY,)}
-                
-                # Recursively render nested groups
+
                 new_path_stack = path_stack + [group_key[0]]
                 node_counter, nested_anchors, nested_grouping_fields = _render_nested_groups(
                     cluster, nested_group_dict, config, node_ids, node_counter,
                     max_widths_per_type, parent_to_children, depth + 1, new_path_stack,
                     group_grouping_fields
                 )
-                
+
                 if nested_anchors:
-                    # Track nested anchors - we use nested_grouping_fields for layout decisions below
-                    cluster_anchor_nodes.extend(nested_anchors)
-            
-            # Layout anchor nodes in this cluster based on depth and grouping fields
-            if len(cluster_anchor_nodes) > 1:
-                if depth >= 2 and has_nested_groups and nested_grouping_fields:
-                    # For L2+ with nested groups, check if we should layout horizontally
-                    # Collect grouping fields for comparison
-                    should_horizontal = _should_layout_horizontally(nested_grouping_fields)
-                    
-                    if should_horizontal:
-                        # Layout horizontally (same rank)
-                        with cluster.subgraph(name=f'rank_nested_{abs(hash(tuple(cluster_anchor_nodes)))}') as rg:
-                            rg.attr(rank='same')
-                            for anchor_id in cluster_anchor_nodes:
-                                rg.node(anchor_id)
-                        
-                        # Add invisible edges to maintain horizontal order
-                        for i in range(len(cluster_anchor_nodes) - 1):
-                            cluster.edge(cluster_anchor_nodes[i], cluster_anchor_nodes[i + 1], 
-                                       style='invis', weight='15')
+                    nested_anchor_nodes.extend(nested_anchors)
+
+            # ------------------------------------------------------------
+            # 2) Render direct resources SECOND (so they go below groups)
+            # ------------------------------------------------------------
+            if has_resources:
+                resources_list = group_content[(RESOURCES_SUBGROUP_KEY,)]
+
+                for resource in resources_list:
+                    parent_key = resource.address
+
+                    # If this resource has children: create parent cluster and render children
+                    if parent_key in parent_to_children:
+                        parent_cluster_name = f'cluster_parent_{abs(hash(parent_key))}'
+
+                        with cluster.subgraph(name=parent_cluster_name) as parent_cluster:
+                            resource_config = get_resource_config(config, resource.resource_type)
+                            display_name = get_display_name(resource, resource_config)
+                            _apply_parent_cluster_style(parent_cluster, display_name, depth=depth + 1)
+
+                            children = parent_to_children[parent_key]
+                            grouped_children = _group_children_by_config(children, config)
+
+                            child_node_ids: List[str] = []
+                            child_node_types: Dict[str, str] = {}
+                            node_counter = _render_grouped_children(
+                                parent_cluster, grouped_children, config,
+                                node_ids, child_node_ids, node_counter,
+                                max_widths_per_type, depth=depth + 2,
+                                node_types=child_node_types
+                            )
+
+                            if child_node_ids:
+                                _layout_nodes_by_type(parent_cluster, child_node_ids, child_node_types)
+                                parent_cluster_first_nodes.append(child_node_ids[0])
+
+                                # first direct "thing" could be the first child in this parent-cluster
+                                if direct_resource_anchor is None:
+                                    direct_resource_anchor = child_node_ids[0]
+
                     else:
-                        # Stack vertically
-                        for i in range(len(cluster_anchor_nodes) - 1):
-                            cluster.edge(cluster_anchor_nodes[i], cluster_anchor_nodes[i + 1], 
-                                       style='invis', weight='10')
+                        # Regular node without children
+                        node_id = f'node_{node_counter}'
+                        node_counter += 1
+                        node_ids[resource.address] = node_id
+
+                        local_node_ids.append(node_id)
+                        local_node_types[node_id] = resource.resource_type
+
+                        resource_config = get_resource_config(config, resource.resource_type)
+                        display_name = get_display_name(resource, resource_config)
+                        icon_path = resource_config.get('diagram_image', '')
+
+                        text_width = max_widths_per_type.get(resource.resource_type)
+                        node_label = _create_node_label(resource.resource_type, display_name, icon_path, text_width)
+                        cluster.node(node_id, label=node_label)
+
+                        if direct_resource_anchor is None:
+                            direct_resource_anchor = node_id
+
+                # Layout direct resources by type (same-type vertical, different types horizontal)
+                if local_node_ids:
+                    _layout_nodes_by_type(cluster, local_node_ids, local_node_types)
+                # (Parent clusters were already laid out internally above.)
+
+            # ------------------------------------------------------------
+            # 3) Layout nested group anchors INSIDE this cluster
+            #    L2+: gleiche Feldnamen => untereinander, verschiedene => nebeneinander (Spalten)
+            # ------------------------------------------------------------
+            if nested_anchor_nodes:
+                if depth >= 2 and nested_grouping_fields and len(nested_grouping_fields) == len(nested_anchor_nodes):
+                    # nested_grouping_fields ist eine Liste: parallel zu nested_anchor_nodes
+                    anchors_with_field = list(zip(nested_anchor_nodes, nested_grouping_fields))
+                    _layout_anchors_by_fieldname(cluster, anchors_with_field)
                 else:
-                    # For L1 or when there are no nested groups, stack vertically within the cluster
-                    # (This handles direct resources at any level)
-                    for i in range(len(cluster_anchor_nodes) - 1):
-                        cluster.edge(cluster_anchor_nodes[i], cluster_anchor_nodes[i + 1], 
-                                   style='invis', weight='10')
-            
-            if cluster_anchor_nodes:
-                anchor_nodes.append(cluster_anchor_nodes[0])
+                    # L1 oder keine Feldnamen-Info: einfach vertikal stapeln
+                    for i in range(len(nested_anchor_nodes) - 1):
+                        cluster.edge(nested_anchor_nodes[i], nested_anchor_nodes[i + 1], style='invis', weight='10')
+
+            # ------------------------------------------------------------
+            # 4) Force: direct resources BELOW the groups
+            # ------------------------------------------------------------
+            if nested_anchor_nodes and direct_resource_anchor:
+                # heavy weight to enforce "groups above, direct resources below"
+                cluster.edge(nested_anchor_nodes[0], direct_resource_anchor, style='invis', weight='20')
+
+            # ------------------------------------------------------------
+            # 5) Pick the cluster's anchor for the parent layout
+            # ------------------------------------------------------------
+            # Prefer groups first (so outer layout aligns by groups), else direct resources.
+            cluster_first_anchor = None
+            if nested_anchor_nodes:
+                cluster_first_anchor = nested_anchor_nodes[0]
+            elif direct_resource_anchor:
+                cluster_first_anchor = direct_resource_anchor
+
+            if cluster_first_anchor:
+                anchor_nodes.append(cluster_first_anchor)
                 anchor_grouping_fields.append(group_grouping_fields)
+
     
     return node_counter, anchor_nodes, anchor_grouping_fields
 
@@ -1183,3 +1172,39 @@ def _layout_nodes_in_grid(g: Digraph, node_ids: List[str], max_cols: int = 3) ->
 
 def _ellipsize(s: str, n: int = 42) -> str:
     return s if len(s) <= n else s[: n - 1] + "…"
+
+def _layout_anchors_by_fieldname(g: Digraph, anchors_with_field: List[Tuple[str, Optional[str]]]) -> None:
+    """
+    anchors_with_field: [(anchor_node_id, field_name), ...]
+    Same field_name => vertical column
+    Different field_name => columns side-by-side
+    """
+    if len(anchors_with_field) <= 1:
+        return
+
+    # preserve incoming order
+    columns: Dict[str, List[str]] = {}
+    col_order: List[str] = []
+
+    for nid, field in anchors_with_field:
+        key = field or "__none__"
+        if key not in columns:
+            columns[key] = []
+            col_order.append(key)
+        columns[key].append(nid)
+
+    # 1) vertical stacking inside each column
+    for key in col_order:
+        col = columns[key]
+        for i in range(len(col) - 1):
+            g.edge(col[i], col[i + 1], style="invis", weight="10")
+
+    # 2) horizontal alignment of the first node of each column
+    first_nodes = [columns[key][0] for key in col_order if columns[key]]
+    if len(first_nodes) > 1:
+        with g.subgraph(name=f"rank_cols_{abs(hash(tuple(first_nodes)))}") as rg:
+            rg.attr(rank="same")
+            for nid in first_nodes:
+                rg.node(nid)
+        for i in range(len(first_nodes) - 1):
+            g.edge(first_nodes[i], first_nodes[i + 1], style="invis", weight="15")
