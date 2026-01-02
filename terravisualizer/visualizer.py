@@ -354,6 +354,33 @@ def _layout_group_anchors(outer_cluster: Digraph, anchor_node_ids: List[str]) ->
     _layout_nodes_in_grid(outer_cluster, anchor_node_ids, max_cols=3)
 
 
+def _should_layout_horizontally(grouping_fields_list: List[Optional[List[str]]]) -> bool:
+    """
+    Determine if groups should be laid out horizontally based on their grouping field names.
+    Groups with the same grouping field names should stack vertically.
+    Groups with different grouping field names should be placed horizontally.
+    
+    Args:
+        grouping_fields_list: List of grouping field lists for each group
+        
+    Returns:
+        True if groups should be laid out horizontally, False for vertical
+    """
+    # Filter out None values
+    valid_fields = [f for f in grouping_fields_list if f is not None and len(f) > 0]
+    
+    if len(valid_fields) <= 1:
+        # Only one group with valid fields or all None - doesn't matter, use vertical
+        return False
+    
+    # Check if all grouping fields are the same
+    first_fields = valid_fields[0]
+    all_same = all(f == first_fields for f in valid_fields)
+    
+    # If all same → vertical, if different → horizontal
+    return not all_same
+
+
 def _render_nested_groups(
     parent_graph,
     nested_dict: Dict[Tuple[str, ...], Any],
@@ -363,8 +390,9 @@ def _render_nested_groups(
     max_widths_per_type: Dict[str, int],
     parent_to_children: Dict[str, List[Resource]],
     depth: int = 1,
-    path_stack: List[str] = None
-) -> Tuple[int, List[str]]:
+    path_stack: List[str] = None,
+    grouping_field_names: Optional[List[str]] = None
+) -> Tuple[int, List[str], Optional[List[str]]]:
     """
     Recursively render nested groups of resources.
     
@@ -378,21 +406,24 @@ def _render_nested_groups(
         parent_to_children: Dictionary mapping parent resource keys to their children
         depth: Current nesting depth for gray color
         path_stack: Stack of group names for label formatting
+        grouping_field_names: List of grouping field names at this level
         
     Returns:
-        Tuple of (updated node_counter, list of anchor node IDs for layout)
+        Tuple of (updated node_counter, list of anchor node IDs for layout, grouping field names)
     """
     if path_stack is None:
         path_stack = []
     
     anchor_nodes = []
+    # Track grouping field names for each anchor to determine layout
+    anchor_grouping_fields = []
     
-    # Sort groups: ungrouped first, then alphabetically
+    # Sort groups: ungrouped last (far right), then alphabetically
     def sort_key(item):
         key, _ = item
         if key == ('ungrouped',):
-            return (0, '')
-        return (1, str(key))
+            return (1, 'zzz_ungrouped')  # Place ungrouped at the very end
+        return (0, str(key))  # Others come first, alphabetically sorted
     
     sorted_items = sorted(nested_dict.items(), key=sort_key)
     
@@ -400,6 +431,20 @@ def _render_nested_groups(
         # Check if this level has any content (resources or nested groups)
         if not isinstance(group_content, dict):
             continue
+        
+        # Extract grouping field names for this group
+        group_grouping_fields = None
+        if (RESOURCES_SUBGROUP_KEY,) in group_content:
+            resources_list = group_content[(RESOURCES_SUBGROUP_KEY,)]
+            if resources_list:
+                # Get grouping fields from first resource in this group
+                first_resource = resources_list[0]
+                resource_config = get_resource_config(config, first_resource.resource_type)
+                if resource_config and 'grouped_by' in resource_config:
+                    grouped_by = resource_config['grouped_by']
+                    if grouped_by and len(grouped_by) > depth:
+                        # Get the field name at the next depth level
+                        group_grouping_fields = grouped_by[depth:depth+1] if depth < len(grouped_by) else None
             
         has_resources = (RESOURCES_SUBGROUP_KEY,) in group_content
         has_nested_groups = any(k != (RESOURCES_SUBGROUP_KEY,) for k in group_content.keys())
@@ -496,23 +541,56 @@ def _render_nested_groups(
                 
                 # Recursively render nested groups
                 new_path_stack = path_stack + [group_key[0]]
-                node_counter, nested_anchors = _render_nested_groups(
+                node_counter, nested_anchors, nested_grouping_fields = _render_nested_groups(
                     cluster, nested_group_dict, config, node_ids, node_counter,
-                    max_widths_per_type, parent_to_children, depth + 1, new_path_stack
+                    max_widths_per_type, parent_to_children, depth + 1, new_path_stack,
+                    group_grouping_fields
                 )
                 
                 if nested_anchors:
-                    cluster_anchor_nodes.extend(nested_anchors)
+                    # Track nested anchors with their grouping fields
+                    for i, nested_anchor in enumerate(nested_anchors):
+                        cluster_anchor_nodes.append(nested_anchor)
+                        # Also track the grouping fields for this nested anchor
+                        if i < len(nested_grouping_fields):
+                            # Store as tuple: (anchor_id, grouping_fields)
+                            pass  # We'll handle this in layout logic below
             
-            # Stack all anchor nodes in this cluster vertically
+            # Layout anchor nodes in this cluster based on depth and grouping fields
             if len(cluster_anchor_nodes) > 1:
-                for i in range(len(cluster_anchor_nodes) - 1):
-                    cluster.edge(cluster_anchor_nodes[i], cluster_anchor_nodes[i + 1], style='invis', weight='10')
+                if depth >= 2 and has_nested_groups:
+                    # For L2+ with nested groups, check if we should layout horizontally
+                    # Collect grouping fields for comparison
+                    should_horizontal = _should_layout_horizontally(nested_grouping_fields) if nested_grouping_fields else False
+                    
+                    if should_horizontal:
+                        # Layout horizontally (same rank)
+                        with cluster.subgraph(name=f'rank_nested_{abs(hash(tuple(cluster_anchor_nodes)))}') as rg:
+                            rg.attr(rank='same')
+                            for anchor_id in cluster_anchor_nodes:
+                                rg.node(anchor_id)
+                        
+                        # Add invisible edges to maintain horizontal order
+                        for i in range(len(cluster_anchor_nodes) - 1):
+                            cluster.edge(cluster_anchor_nodes[i], cluster_anchor_nodes[i + 1], 
+                                       style='invis', weight='15')
+                    else:
+                        # Stack vertically
+                        for i in range(len(cluster_anchor_nodes) - 1):
+                            cluster.edge(cluster_anchor_nodes[i], cluster_anchor_nodes[i + 1], 
+                                       style='invis', weight='10')
+                else:
+                    # For L1 or when there are no nested groups, stack vertically within the cluster
+                    # (This handles direct resources at any level)
+                    for i in range(len(cluster_anchor_nodes) - 1):
+                        cluster.edge(cluster_anchor_nodes[i], cluster_anchor_nodes[i + 1], 
+                                   style='invis', weight='10')
             
             if cluster_anchor_nodes:
                 anchor_nodes.append(cluster_anchor_nodes[0])
+                anchor_grouping_fields.append(group_grouping_fields)
     
-    return node_counter, anchor_nodes
+    return node_counter, anchor_nodes, anchor_grouping_fields
 
 
 def generate_diagram(
@@ -601,16 +679,23 @@ def generate_diagram(
         container.attr(margin='50')  # Padding inside the container
         
         # Use the new recursive rendering function to handle unlimited nesting
-        node_counter, outer_cluster_anchor_nodes = _render_nested_groups(
+        node_counter, outer_cluster_anchor_nodes, outer_grouping_fields = _render_nested_groups(
             container, grouped, config, node_ids, node_counter,
             max_widths_per_type, parent_to_children, depth=1
         )
         
-        # Add invisible edges to force outer clusters to stack vertically
+        # Layout outer clusters (L1) horizontally side by side
         if len(outer_cluster_anchor_nodes) > 1:
+            # Place all L1 clusters on the same rank (horizontal)
+            with container.subgraph(name='rank_l1_clusters') as rg:
+                rg.attr(rank='same')
+                for anchor_id in outer_cluster_anchor_nodes:
+                    rg.node(anchor_id)
+            
+            # Add invisible edges to maintain horizontal order
             for i in range(len(outer_cluster_anchor_nodes) - 1):
                 container.edge(outer_cluster_anchor_nodes[i], outer_cluster_anchor_nodes[i + 1],
-                             style='invis', weight=OUTER_CLUSTER_STACK_WEIGHT)
+                             style='invis', weight='15')
     
     # Remove extension from output_path if present
     output_base = str(Path(output_path).with_suffix(''))
