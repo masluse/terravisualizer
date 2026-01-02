@@ -931,37 +931,12 @@ def _shorten_path_name(name: str) -> str:
     
     Otherwise, if the string contains brackets [...], extract the content from within
     the rightmost bracket pair first, then apply '/' shortening logic.
-    
-    Examples:
-        "serviceAccount:prj-k8s@example.com[kubexporter/kubexporter-job]" -> unchanged (has @)
-        "serviceAccount:any-identifier[kubexporter/kubexporter-job]" -> unchanged (is serviceAccount)
-        "path/to/resource" -> "resource"
-        "user@example.com" -> "user@example.com" (no shortening due to @)
-        "test[foo]bar[baz]" -> "baz" (no @, uses rightmost bracket then shortens)
-    
-    Args:
-        name: The name to shorten (may contain '/' characters and brackets)
         
     Returns:
         The shortened name
     """
-    # If the original string contains '@' or starts with 'serviceAccount:', don't process it at all
-    # This preserves email addresses and service account identifiers
-    if '@' in name or name.startswith('serviceAccount:'):
-        return name
-    
-    # Extract content from rightmost brackets if present
-    if '[' in name and ']' in name:
-        # Find the last opening bracket
-        start = name.rfind('[')
-        # Find the closing bracket after it
-        end = name.find(']', start)
-        if end > start:
-            # Extract content from rightmost brackets
-            name = name[start + 1:end]
-    
-    # Apply the shortening logic (only if no '@' in original)
-    if '/' in name:
+    # Apply the shortening logic (only if name starts with "projects/")
+    if name.startswith('projects/'):
         return name.rsplit('/', 1)[-1]
     return name
 
