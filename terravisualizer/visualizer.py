@@ -442,9 +442,9 @@ def _render_nested_groups(
                 resource_config = get_resource_config(config, first_resource.resource_type)
                 if resource_config and 'grouped_by' in resource_config:
                     grouped_by = resource_config['grouped_by']
-                    if grouped_by and len(grouped_by) > depth:
-                        # Get the field name at the next depth level
-                        group_grouping_fields = grouped_by[depth:depth+1] if depth < len(grouped_by) else None
+                    if grouped_by:
+                        # Get the field name at the next depth level (safely handles out of bounds)
+                        group_grouping_fields = grouped_by[depth:depth+1] if len(grouped_by) > depth else []
             
         has_resources = (RESOURCES_SUBGROUP_KEY,) in group_content
         has_nested_groups = any(k != (RESOURCES_SUBGROUP_KEY,) for k in group_content.keys())
@@ -535,6 +535,7 @@ def _render_nested_groups(
                     cluster_anchor_nodes.append(parent_cluster_first_nodes[0])
             
             # Then, recursively render any nested groups
+            nested_grouping_fields = None  # Initialize to avoid undefined variable
             if has_nested_groups:
                 # Get only the nested group keys (exclude 'resources' key)
                 nested_group_dict = {k: v for k, v in group_content.items() if k != (RESOURCES_SUBGROUP_KEY,)}
@@ -548,20 +549,15 @@ def _render_nested_groups(
                 )
                 
                 if nested_anchors:
-                    # Track nested anchors with their grouping fields
-                    for i, nested_anchor in enumerate(nested_anchors):
-                        cluster_anchor_nodes.append(nested_anchor)
-                        # Also track the grouping fields for this nested anchor
-                        if i < len(nested_grouping_fields):
-                            # Store as tuple: (anchor_id, grouping_fields)
-                            pass  # We'll handle this in layout logic below
+                    # Track nested anchors - we use nested_grouping_fields for layout decisions below
+                    cluster_anchor_nodes.extend(nested_anchors)
             
             # Layout anchor nodes in this cluster based on depth and grouping fields
             if len(cluster_anchor_nodes) > 1:
-                if depth >= 2 and has_nested_groups:
+                if depth >= 2 and has_nested_groups and nested_grouping_fields:
                     # For L2+ with nested groups, check if we should layout horizontally
                     # Collect grouping fields for comparison
-                    should_horizontal = _should_layout_horizontally(nested_grouping_fields) if nested_grouping_fields else False
+                    should_horizontal = _should_layout_horizontally(nested_grouping_fields)
                     
                     if should_horizontal:
                         # Layout horizontally (same rank)
